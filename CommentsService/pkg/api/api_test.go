@@ -2,11 +2,15 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 
@@ -28,7 +32,9 @@ func TestAPI_createCommentHandler(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		api.db.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Close(ctx)
 	})
 
 	targetPostID, err := uuid.NewV4()
@@ -43,7 +49,7 @@ func TestAPI_createCommentHandler(t *testing.T) {
 
 	b, err := json.Marshal(testComment)
 	if err != nil {
-		t.Fatalf("unexpected error marshaling comment: %v", err)
+		t.Fatalf("failed to marshal comment: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/comments", bytes.NewBuffer(b))
@@ -78,5 +84,114 @@ func TestAPI_createCommentHandler(t *testing.T) {
 	}
 	if gotComment.Published.IsZero() {
 		t.Errorf("comment published has zero time value")
+	}
+}
+
+func TestAPI_commentsHandler(t *testing.T) {
+	db, err := mongo.StorageConnect()
+	if err != nil {
+		t.Fatalf("failed to connect to DB: %v", err)
+	}
+
+	api := New(db)
+
+	t.Cleanup(func() {
+		err := mongo.RestoreDB(db)
+		if err != nil {
+			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Close(ctx)
+	})
+
+	targetPostID, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("failed to generate uuid: %v", err)
+	}
+
+	testComment := models.Comment{
+		PostID: targetPostID,
+		Author: "John Doe",
+		Text:   "This is a test comment",
+	}
+
+	b, err := json.Marshal(testComment)
+	if err != nil {
+		t.Fatalf("failed to marshal comment: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/comments", bytes.NewBuffer(b))
+	rr := httptest.NewRecorder()
+	api.r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("want status code %v, got status code %v", http.StatusCreated, rr.Code)
+	}
+	var targetComment models.Comment
+	b, err = io.ReadAll(rr.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	err = json.Unmarshal(b, &targetComment)
+	if err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	reqUrl := fmt.Sprintf("/comments?post_id=%s", targetPostID.String())
+	req = httptest.NewRequest(http.MethodGet, reqUrl, nil)
+	rr = httptest.NewRecorder()
+	api.Router().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want status code %v, got status code %v", http.StatusOK, rr.Code)
+	}
+	var comments []models.Comment
+	b, err = io.ReadAll(rr.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	err = json.Unmarshal(b, &comments)
+	if err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(comments) == 0 {
+		t.Fatalf("expected at least one comment, got none")
+	}
+	gotComment := comments[0]
+
+	// Normalize times before comparison
+	targetComment.Published = targetComment.Published.Round(time.Second).UTC()
+	gotComment.Published = gotComment.Published.Round(time.Second).UTC()
+
+	if !reflect.DeepEqual(gotComment, targetComment) {
+		t.Errorf("want comment\n%+v\n\ngot comment\n%+v\n", targetComment, gotComment)
+	}
+}
+
+func TestAPI_commentsHandlerNoComments(t *testing.T) {
+	db, err := mongo.StorageConnect()
+	if err != nil {
+		t.Fatalf("failed to connect to DB: %v", err)
+	}
+
+	api := New(db)
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Close(ctx)
+	})
+
+	targetPostID, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("failed to generate uuid: %v", err)
+	}
+	reqUrl := fmt.Sprintf("/comments?post_id=%s", targetPostID.String())
+	req := httptest.NewRequest(http.MethodGet, reqUrl, nil)
+	rr := httptest.NewRecorder()
+	api.Router().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("want status code %v, got status code %v", http.StatusNotFound, rr.Code)
 	}
 }
