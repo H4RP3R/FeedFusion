@@ -13,5 +13,5 @@ type Comment struct {
 	Author    string     `bson:"author" json:"author"`
 	Text      string     `bson:"text" json:"text"`
 	Published time.Time  `bson:"published" json:"published"`
-	Replies   []*Comment `json:"comments"`
+	Replies   []*Comment `json:"replies"`
 }
