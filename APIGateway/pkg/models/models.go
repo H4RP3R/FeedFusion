@@ -25,8 +25,9 @@ type Preview struct {
 type Comment struct {
 	ID        uuid.UUID  `json:"id"`
 	PostID    uuid.UUID  `json:"post_id"`
-	ParentID  *uuid.UUID `json:"parent_id,omitempty"`
+	ParentID  uuid.UUID  `json:"parent_id,omitempty"`
 	Author    string     `json:"author"`
 	Text      string     `json:"text"`
 	Published time.Time  `json:"published"`
+	Replies   []*Comment `json:"replies"`
 }
