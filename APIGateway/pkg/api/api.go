@@ -1,20 +1,22 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 
 	"gateway/pkg/models"
 )
 
 const (
-	commentsServiceURL = ""
+	commentsServiceURL = "http://localhost:8077"
 	timeout            = 5 * time.Second
 )
 
@@ -27,6 +29,8 @@ func (api *API) Router() *mux.Router {
 }
 
 func (api *API) endpoints() {
+	api.r.Use(api.headerMiddleware)
+
 	api.r.HandleFunc("/news/latest", api.latestNewsProxy).Queries("page", "{page:[0-9]+}").Methods(http.MethodGet)
 	api.r.HandleFunc("/news/filter", api.filterNewsProxy).Methods(http.MethodGet)
 	api.r.HandleFunc("/news/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$}", api.newsDetailedProxy).Methods(http.MethodGet)
@@ -105,44 +109,67 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
-	var comment models.Comment
-
-	if err := json.NewDecoder(r.Body).Decode(&comment); err != nil {
-		log.Printf("[addCommentProxy][from:%v] error decoding request body: %v", r.RemoteAddr, err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	if comment.PostID == uuid.Nil && comment.ParentID == nil {
-		log.Printf("[addCommentProxy][from:%v] post and parent IDs are missing", r.RemoteAddr)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	client := &http.Client{Timeout: timeout}
-	serviceURL := commentsServiceURL + "/comments"
-	proxyReq, err := http.NewRequest(r.Method, serviceURL, r.Body)
-
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("[addCommentProxy][from:%v] error creating request: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][from:%v] error reading request body: %v", r.RemoteAddr, err)
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	r.Body.Close()
+
+	// Cut off invalid requests
+	var comment models.Comment
+	if err := json.Unmarshal(b, &comment); err != nil {
+		log.Errorf("[createCommentProxy][from:%v] invalid JSON: %v", r.RemoteAddr, err)
+		http.Error(w, "Bad Request: invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if comment.PostID == uuid.Nil && comment.ParentID == uuid.Nil {
+		log.Errorf("[createCommentProxy][from:%v] missing post_id and parent_id", r.RemoteAddr)
+		http.Error(w, "Bad Request: missing post_id or parent_id", http.StatusBadRequest)
+		return
+	}
+
+	targetURL := fmt.Sprint(commentsServiceURL + "/comments")
+
+	proxyReq, err := http.NewRequest(r.Method, targetURL, bytes.NewReader(b))
+	if err != nil {
+		log.Errorf("[createCommentProxy][from:%v] error creating proxy request: %v", r.RemoteAddr, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	proxyReq.Header = r.Header.Clone()
-	proxyReq.Header.Del("X-Request-Id")
+	// Remove hop-by-hop headers
+	proxyReq.Header.Del("Connection")
+	proxyReq.Header.Del("Keep-Alive")
+	proxyReq.Header.Del("Proxy-Authenticate")
+	proxyReq.Header.Del("Proxy-Authorization")
+	proxyReq.Header.Del("TE")
+	proxyReq.Header.Del("Trailer")
+	proxyReq.Header.Del("Transfer-Encoding")
+	proxyReq.Header.Del("Upgrade")
 
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
-		log.Printf("[addCommentProxy][from:%v] service call error: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][from:%v] error calling comments service: %v", r.RemoteAddr, err)
 		http.Error(w, "Comments Service Unavailable", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
+	// Copy response headers
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+
 	w.WriteHeader(resp.StatusCode)
+
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("[addCommentProxy][from:%v] response copy error: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
 	}
 }
 
