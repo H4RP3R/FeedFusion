@@ -23,7 +23,9 @@ func TestStorage_CreateComment(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		db.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Close(ctx)
 	})
 
 	testCommentID, err := uuid.NewV4()
@@ -116,7 +118,9 @@ func TestStorage_Comments(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		db.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		db.Close(ctx)
 	})
 
 	postID, err := uuid.NewV4()

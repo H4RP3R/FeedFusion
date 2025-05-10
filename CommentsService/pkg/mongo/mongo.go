@@ -19,6 +19,7 @@ var (
 
 	ErrPostIDNotProvided     = fmt.Errorf("postID not provided")
 	ErrParentCommentNotFound = fmt.Errorf("parent comment not found")
+	ErrCommentsNotFound      = fmt.Errorf("comments not found")
 )
 
 type Storage struct {
@@ -26,7 +27,7 @@ type Storage struct {
 	dbName string
 }
 
-func New(conf Config) (*Storage, error) {
+func New(conf *Config) (*Storage, error) {
 	opt := conf.Options()
 	client, err := mongo.Connect(context.Background(), opt)
 	if err != nil {
@@ -43,8 +44,8 @@ func (s *Storage) Ping() error {
 	return s.client.Ping(context.Background(), nil)
 }
 
-func (s *Storage) Close() {
-	s.client.Disconnect(context.Background())
+func (s *Storage) Close(ctx context.Context) {
+	s.client.Disconnect(ctx)
 }
 
 // CreateComment inserts a new comment into the database.
@@ -114,6 +115,10 @@ func (s *Storage) Comments(postID uuid.UUID) ([]*models.Comment, error) {
 	var comments []models.Comment
 	if err := cur.All(context.Background(), &comments); err != nil {
 		return nil, err
+	}
+
+	if len(comments) == 0 {
+		return nil, ErrCommentsNotFound
 	}
 
 	commentMap := make(map[uuid.UUID]*models.Comment)

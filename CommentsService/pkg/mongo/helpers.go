@@ -2,10 +2,10 @@ package mongo
 
 import "context"
 
-var MongoTestConf = Config{
+var MongoTestConf = &Config{
 	Host:   "localhost",
 	Port:   "27018",
-	DBName: "comments",
+	DBName: "comments_test",
 }
 
 // StorageConnect is a helper function that establishes a connection to the predefined test Mongo instance.
