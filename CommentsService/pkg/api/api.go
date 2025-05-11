@@ -22,11 +22,12 @@ func (api *API) Router() *mux.Router {
 }
 
 func (api *API) endpoints() {
+	api.r.Use(api.headerMiddleware)
+
 	api.r.HandleFunc("/comments", api.createCommentHandler).Methods(http.MethodPost)
 	api.r.HandleFunc("/comments", api.commentsHandler).
 		Queries("post_id", "{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}").
 		Methods(http.MethodGet)
-
 }
 
 func New(db *mongo.Storage) *API {
