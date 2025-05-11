@@ -89,23 +89,71 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 	idStr, ok := mux.Vars(r)["id"]
+	if !ok {
+		http.Error(w, "Missing id parameter", http.StatusBadRequest)
+		return
+	}
 	id, err := uuid.FromString(idStr)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "Invalid UUID format", http.StatusBadRequest)
+		return
 	}
 
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-	}
-
-	for _, post := range mockNews {
-		if post.ID == id {
-			json.NewEncoder(w).Encode(post)
-			return
+	var post models.Post
+	found := false
+	for _, p := range mockNews {
+		if p.ID == id {
+			post = p
+			found = true
+			break
 		}
 	}
+	if !found {
+		http.Error(w, "Post not found", http.StatusNotFound)
+		return
+	}
 
-	w.WriteHeader(http.StatusBadRequest)
+	targetURL := fmt.Sprint(commentsServiceURL + "/comments?post_id=" + idStr)
+	commentsReq, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		log.Errorf("[newsDetailedProxy][from:%v] error creating request to comments service: %v", r.RemoteAddr, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	commentsResp, err := client.Do(commentsReq)
+	if err != nil {
+		log.Errorf("[newsDetailedProxy][from:%v] error calling comments service: %v", r.RemoteAddr, err)
+		http.Error(w, "Comments Service Unavailable", http.StatusBadGateway)
+		return
+	}
+	defer commentsResp.Body.Close()
+
+	if commentsResp.StatusCode == http.StatusOK {
+		b, err := io.ReadAll(commentsResp.Body)
+		if err != nil {
+			log.Errorf("[newsDetailedProxy][from:%v] error reading response body: %v", r.RemoteAddr, err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		var comments []models.Comment
+		err = json.Unmarshal(b, &comments)
+		if err != nil {
+			log.Errorf("[newsDetailedProxy][from:%v] error unmarshaling response body: %v", r.RemoteAddr, err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		post.Comments = comments
+	}
+
+	if err = json.NewEncoder(w).Encode(post); err != nil {
+		log.Errorf("[newsDetailedProxy][from:%v] error encoding responseL %v", r.RemoteAddr, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
