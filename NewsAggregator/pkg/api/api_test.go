@@ -6,19 +6,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"testing"
-
-	log "github.com/sirupsen/logrus"
-
 	"news/pkg/storage"
 	"news/pkg/storage/memdb"
+	"os"
+	"testing"
 )
 
 const testPostsPath = "../../test_data/post_examples.json"
 
 func TestMain(m *testing.M) {
-	log.SetLevel(log.PanicLevel)
+	//log.SetLevel(log.PanicLevel)
 
 	exitCode := m.Run()
 	os.Exit(exitCode)
@@ -112,4 +109,25 @@ func TestAPI_postsHandlerInvalidNewsNum(t *testing.T) {
 			t.Errorf("want status code %v, got status code %v", http.StatusBadRequest, rr.Code)
 		}
 	})
+}
+
+func TestAPI_filterPostsHandler(t *testing.T) {
+	db := memdb.New()
+	api := New(db)
+
+	// Expect 200
+	req := httptest.NewRequest(http.MethodGet, "/news/filter?contains=some_text", nil)
+	rr := httptest.NewRecorder()
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("want status code %v, got %v", http.StatusOK, rr.Code)
+	}
+
+	// Expect 400
+	req = httptest.NewRequest(http.MethodGet, "/news/filter?contains=", nil)
+	rr = httptest.NewRecorder()
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want status code %v, got %v", http.StatusBadRequest, rr.Code)
+	}
 }

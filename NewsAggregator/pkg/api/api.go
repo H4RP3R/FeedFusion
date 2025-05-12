@@ -32,6 +32,7 @@ func New(db storage.Storage) *API {
 
 func (api *API) endpoints() {
 	api.Router.Use(api.headerMiddleware)
+	api.Router.HandleFunc("/news/filter", api.filterPostsHandler).Methods(http.MethodGet)
 	api.Router.HandleFunc("/news/{n}", api.postsHandler).Methods(http.MethodGet)
 }
 
@@ -67,4 +68,29 @@ func (api *API) postsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Infof("[postsHandler] response sent to %v", r.RemoteAddr)
+}
+
+func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
+	contains := r.URL.Query().Get("contains")
+	if contains == "" {
+		http.Error(w, "Empty contains parameter", http.StatusBadRequest)
+		log.Debugf("[filterPostsHandler] request with empty parameter from: %v", r.RemoteAddr)
+		return
+	}
+
+	posts, err := api.DB.FilterPosts(contains)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[filterPostsHandler] FilterPosts() returned error: %v", err)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(posts)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[filterPostsHandler] failed to encode posts data: %v", err)
+		return
+	}
+
+	log.Debugf("[filterPostsHandler] response sent to: %v", r.RemoteAddr)
 }
