@@ -32,6 +32,9 @@ type Storage interface {
 
 	// Posts retrieves the 'n' newest posts from the storage and an error if any occurs.
 	Posts(n int) (posts []Post, err error)
+
+	// FilterPosts returns a list of posts whose titles contain the given substring.
+	FilterPosts(contains string) (posts []Post, err error)
 }
 
 // ValidatePosts accepts a slice of posts and removes the invalid ones, i.e., posts containing any empty fields.

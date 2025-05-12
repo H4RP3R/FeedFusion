@@ -62,3 +62,7 @@ func (db *Store) Posts(n int) (posts []storage.Post, err error) {
 
 	return posts[:n], nil
 }
+
+func (s *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
+	return
+}
