@@ -231,6 +231,8 @@ func TestStore_FilterPosts(t *testing.T) {
 		{name: "Lowercase search", text: "post", wantMatchCnt: 18},
 		{name: "Uppercase search", text: "POST", wantMatchCnt: 18},
 		{name: "Cyrillic title", text: "назван", wantMatchCnt: 1},
+		{name: "No match", text: "x-x-x", wantMatchCnt: 0},
+		{name: "Empty string", text: "", wantMatchCnt: 0},
 	}
 
 	db, err := storageConnect()
