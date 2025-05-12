@@ -133,3 +133,34 @@ func (s *Store) Posts(n int) (posts []storage.Post, err error) {
 
 	return posts, rows.Err()
 }
+
+func (s *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
+	rows, err := s.db.Query(context.Background(), `
+		SELECT id, title, content, published, link
+		FROM posts
+		WHERE title ILIKE $1
+	`,
+		"%"+contains+"%",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		var p storage.Post
+		err = rows.Scan(
+			&p.ID,
+			&p.Title,
+			&p.Content,
+			&p.Published,
+			&p.Link,
+		)
+		if err != nil {
+			return nil, err
+		}
+		p.Published = p.Published.UTC()
+		posts = append(posts, p)
+	}
+
+	return
+}

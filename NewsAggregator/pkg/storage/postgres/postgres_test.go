@@ -2,13 +2,14 @@ package postgres
 
 import (
 	"context"
-	"news/pkg/storage"
-	"news/pkg/storage/memdb"
 	"os"
 	"reflect"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
+
+	"news/pkg/storage"
+	"news/pkg/storage/memdb"
 )
 
 const testPostsPath = "../../../test_data/post_examples.json"
@@ -215,5 +216,58 @@ func TestStore_Posts(t *testing.T) {
 		if !reflect.DeepEqual(posts, wantPosts) {
 			t.Errorf("want posts\n%+v\ngot posts\n%+v\n", wantPosts, posts)
 		}
+	}
+}
+
+func TestStore_FilterPosts(t *testing.T) {
+	tests := []struct {
+		name         string
+		text         string
+		wantMatchCnt int
+	}{
+		{name: "Exact match", text: "A Tale of a Cat", wantMatchCnt: 1},
+		{name: "Partial match", text: "e of a", wantMatchCnt: 1},
+		{name: "Mixed case", text: "tAlE", wantMatchCnt: 1},
+		{name: "Lowercase search", text: "post", wantMatchCnt: 18},
+		{name: "Uppercase search", text: "POST", wantMatchCnt: 18},
+		{name: "Cyrillic title", text: "назван", wantMatchCnt: 1},
+	}
+
+	db, err := storageConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		err := truncatePosts(db)
+		if err != nil {
+			t.Errorf("unexpected error clearing posts table: %v", err)
+		}
+
+		db.Close()
+	})
+
+	testPosts, err := memdb.LoadTestPosts(testPostsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, post := range testPosts {
+		testPosts[i].ID, err = db.AddPost(post)
+		if err != nil {
+			t.Fatalf("unexpected error while populating DB: %v", err)
+		}
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			posts, err := db.FilterPosts(tt.text)
+			if err != nil {
+				t.Errorf("FilterPosts() returned error: %v", err)
+			}
+			if len(posts) != tt.wantMatchCnt {
+				t.Errorf("want posts %d, got %d", tt.wantMatchCnt, len(posts))
+			}
+		})
 	}
 }
