@@ -108,14 +108,14 @@
         "link": "https://news.today/articles/18"
     },
     {
-        "title": "Post 19",
+        "title": "Кириллица в названии",
         "content": "Nineteenth post content",
         "published": "2024-03-15T14:00:30+09:00",
         "link": "https://blog.example.com/post/19"
     },
     {
-        "title": "Post 20",
-        "content": "Twentieth post content",
+        "title": "A Tale of a Cat",
+        "content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit",
         "published": "2024-03-15T08:00:00+01:00",
         "link": "https://news.today/articles/20"
     }

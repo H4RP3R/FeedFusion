@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -17,6 +18,7 @@ import (
 
 const (
 	commentsServiceURL = "http://localhost:8077"
+	newsServiceURL     = "http://localhost:8066"
 	timeout            = 5 * time.Second
 )
 
@@ -63,27 +65,53 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// curl 'http://localhost:8080/news/filter?startDate=2023-01-01&endDate=2023-04-01&contains=text&sortField=date&sortDirection=asc'
 func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
-	_ = r.URL.Query().Get("startDate")
-	_ = r.URL.Query().Get("endDate")
-	_ = r.URL.Query().Get("contains")
-	_ = r.URL.Query().Get("sortField")
-	_ = r.URL.Query().Get("sortDirection")
-
-	var previews []models.Preview
-	for _, n := range mockNews {
-		var prev models.Preview
-		prev.ID = n.ID
-		prev.Title = n.Title
-		prev.Link = n.Link
-		prev.Published = n.Published
-		previews = append(previews, prev)
+	contains := r.URL.Query().Get("contains")
+	if contains == "" {
+		log.Debugf("[filterNewsProxy][from:%v] empty contains parameter", r.RemoteAddr)
+		http.Error(w, "Empty contains parameter", http.StatusBadRequest)
+		return
 	}
 
-	err := json.NewEncoder(w).Encode(previews)
+	targetURL := fmt.Sprintf("%s/news/filter?contains=%s", newsServiceURL, url.QueryEscape(contains))
+
+	proxyReq, err := http.NewRequest(r.Method, targetURL, nil)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Errorf("[filterNewsProxy][from:%v] error creating proxy request: %v", r.RemoteAddr, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	proxyReq.Header = r.Header.Clone()
+	// Remove hop-by-hop headers
+	proxyReq.Header.Del("Connection")
+	proxyReq.Header.Del("Keep-Alive")
+	proxyReq.Header.Del("Proxy-Authenticate")
+	proxyReq.Header.Del("Proxy-Authorization")
+	proxyReq.Header.Del("TE")
+	proxyReq.Header.Del("Trailer")
+	proxyReq.Header.Del("Transfer-Encoding")
+	proxyReq.Header.Del("Upgrade")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		log.Errorf("[filterNewsProxy][from:%v] error calling news aggregator: %v", r.RemoteAddr, err)
+		http.Error(w, "News Aggregator Unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Errorf("[filterNewsProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
 	}
 }
 

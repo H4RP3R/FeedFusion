@@ -118,7 +118,7 @@ func main() {
 	}()
 
 	server := &http.Server{
-		Addr:    ":8088",
+		Addr:    ":8066",
 		Handler: api.Router,
 	}
 
