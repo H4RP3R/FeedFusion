@@ -66,3 +66,7 @@ func (db *Store) Posts(n int) (posts []storage.Post, err error) {
 func (s *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
 	return
 }
+
+func (s *Store) Post(id uuid.UUID) (post storage.Post, err error) {
+	return
+}

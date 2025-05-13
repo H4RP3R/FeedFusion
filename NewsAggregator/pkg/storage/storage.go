@@ -13,6 +13,7 @@ import (
 var (
 	ErrConnectDB       = fmt.Errorf("unable to establish DB connection")
 	ErrDBNotResponding = fmt.Errorf("DB not responding")
+	ErrPostNotFound    = fmt.Errorf("post not found")
 )
 
 type Post struct {
@@ -32,6 +33,9 @@ type Storage interface {
 
 	// Posts retrieves the 'n' newest posts from the storage and an error if any occurs.
 	Posts(n int) (posts []Post, err error)
+
+	// Post retrieves a post by its ID. It returns the post and an error if any occurs.
+	Post(id uuid.UUID) (post Post, err error)
 
 	// FilterPosts returns a list of posts whose titles contain the given substring.
 	FilterPosts(contains string) (posts []Post, err error)
