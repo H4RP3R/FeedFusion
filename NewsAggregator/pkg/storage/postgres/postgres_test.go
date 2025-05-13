@@ -321,7 +321,11 @@ func TestStore_PostNotExist(t *testing.T) {
 	defer db.Close()
 
 	wantErr := storage.ErrPostNotFound
-	post, gotErr := db.Post(uuid.FromStringOrNil("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"))
+	targetPostID, err := uuid.FromString("01234567-89ab-cdef-0123-456789abcdef")
+	if err != nil {
+		t.Fatalf("unexpected error while parsing UUID: %v", err)
+	}
+	post, gotErr := db.Post(targetPostID)
 	if !errors.Is(gotErr, wantErr) {
 		t.Errorf("want error %v, got %v", wantErr, gotErr)
 	}
