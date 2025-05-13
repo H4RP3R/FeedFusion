@@ -63,10 +63,18 @@ func (db *Store) Posts(n int) (posts []storage.Post, err error) {
 	return posts[:n], nil
 }
 
-func (s *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
+func (db *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
 	return
 }
 
-func (s *Store) Post(id uuid.UUID) (post storage.Post, err error) {
-	return
+func (db *Store) Post(id uuid.UUID) (post storage.Post, err error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	post, ok := db.posts[id]
+	if !ok {
+		return storage.Post{}, storage.ErrPostNotFound
+	}
+
+	return post, nil
 }

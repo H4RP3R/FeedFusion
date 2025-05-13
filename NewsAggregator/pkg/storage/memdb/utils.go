@@ -6,6 +6,8 @@ import (
 	"os"
 	"sort"
 
+	"github.com/gofrs/uuid"
+
 	"news/pkg/storage"
 )
 
@@ -25,6 +27,7 @@ func LoadTestPosts(path string) ([]storage.Post, error) {
 	}
 
 	for i := 0; i < len(posts); i++ {
+		posts[i].ID = uuid.NewV5(uuid.NamespaceURL, posts[i].Link)
 		posts[i].Published = posts[i].Published.UTC()
 	}
 
