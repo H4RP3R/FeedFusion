@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -118,67 +119,62 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 	idStr, ok := mux.Vars(r)["id"]
 	if !ok {
+		log.Debugf("[newsDetailedProxy][from:%v] missing id parameter", r.RemoteAddr)
 		http.Error(w, "Missing id parameter", http.StatusBadRequest)
 		return
 	}
-	id, err := uuid.FromString(idStr)
-	if err != nil {
-		http.Error(w, "Invalid UUID format", http.StatusBadRequest)
-		return
-	}
+
+	numSubRequests := 2
+	respChan := make(chan any, numSubRequests)
+	wg := &sync.WaitGroup{}
+	wg.Add(numSubRequests)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// Comments sub request
+	go func(wg *sync.WaitGroup, client *http.Client) {
+		defer wg.Done()
+
+		url, _ := url.Parse(commentsServiceURL)
+		url = url.JoinPath("comments")
+		values := url.Query()
+		values.Set("post_id", idStr)
+		url.RawQuery = values.Encode()
+		fetchResource(client, url.String(), "comments service", &[]models.Comment{}, respChan)
+
+	}(wg, client)
+
+	// News sub request
+	go func(wg *sync.WaitGroup, client *http.Client) {
+		defer wg.Done()
+
+		url, _ := url.Parse(newsServiceURL)
+		url = url.JoinPath(url.Path, "news", idStr)
+		fetchResource(client, url.String(), "news aggregator", &models.Post{}, respChan)
+	}(wg, client)
+
+	wg.Wait()
+	close(respChan)
 
 	var post models.Post
-	found := false
-	for _, p := range mockNews {
-		if p.ID == id {
-			post = p
-			found = true
-			break
-		}
-	}
-	if !found {
-		http.Error(w, "Post not found", http.StatusNotFound)
-		return
-	}
+	var comments []models.Comment
 
-	targetURL := fmt.Sprint(commentsServiceURL + "/comments?post_id=" + idStr)
-	commentsReq, err := http.NewRequest(http.MethodGet, targetURL, nil)
-	if err != nil {
-		log.Errorf("[newsDetailedProxy][from:%v] error creating request to comments service: %v", r.RemoteAddr, err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	commentsResp, err := client.Do(commentsReq)
-	if err != nil {
-		log.Errorf("[newsDetailedProxy][from:%v] error calling comments service: %v", r.RemoteAddr, err)
-		http.Error(w, "Comments Service Unavailable", http.StatusBadGateway)
-		return
-	}
-	defer commentsResp.Body.Close()
-
-	if commentsResp.StatusCode == http.StatusOK {
-		b, err := io.ReadAll(commentsResp.Body)
-		if err != nil {
-			log.Errorf("[newsDetailedProxy][from:%v] error reading response body: %v", r.RemoteAddr, err)
+	for msg := range respChan {
+		switch v := msg.(type) {
+		case *[]models.Comment:
+			comments = *v
+		case *models.Post:
+			post = *v
+		case error:
+			log.Errorf("[newsDetailedProxy][from:%v] error in sub request: %v", r.RemoteAddr, msg)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-
-		var comments []models.Comment
-		err = json.Unmarshal(b, &comments)
-		if err != nil {
-			log.Errorf("[newsDetailedProxy][from:%v] error unmarshaling response body: %v", r.RemoteAddr, err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		post.Comments = comments
 	}
 
-	if err = json.NewEncoder(w).Encode(post); err != nil {
-		log.Errorf("[newsDetailedProxy][from:%v] error encoding responseL %v", r.RemoteAddr, err)
+	post.Comments = comments
+
+	if err := json.NewEncoder(w).Encode(post); err != nil {
+		log.Errorf("[newsDetailedProxy][from:%v] error encoding response: %v", r.RemoteAddr, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -247,6 +243,33 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Errorf("[createCommentProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
 	}
+}
+
+func fetchResource(client *http.Client, url, service string, resultObj any, respChan chan any) {
+	proxyReq, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		respChan <- fmt.Errorf("error creating request to comments service: %w", err)
+		return
+	}
+
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		respChan <- fmt.Errorf("error calling comments service: %w", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respChan <- fmt.Errorf("%s returned status %d", service, resp.StatusCode)
+		return
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&resultObj); err != nil {
+		respChan <- fmt.Errorf("error decoding response from %s: %w", service, err)
+		return
+	}
+
+	respChan <- resultObj
 }
 
 var mockNews = []models.Post{
