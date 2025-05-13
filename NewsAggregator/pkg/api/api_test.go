@@ -6,17 +6,21 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
+	"testing"
+
+	"github.com/gofrs/uuid"
+	log "github.com/sirupsen/logrus"
+
 	"news/pkg/storage"
 	"news/pkg/storage/memdb"
-	"os"
-	"testing"
 )
 
 const testPostsPath = "../../test_data/post_examples.json"
 
 func TestMain(m *testing.M) {
-	//log.SetLevel(log.PanicLevel)
-
+	log.SetLevel(log.PanicLevel)
 	exitCode := m.Run()
 	os.Exit(exitCode)
 }
@@ -129,5 +133,75 @@ func TestAPI_filterPostsHandler(t *testing.T) {
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("want status code %v, got %v", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestAPI_postDetailedHandler(t *testing.T) {
+	db := memdb.New()
+	testPosts, err := memdb.LoadTestPosts(testPostsPath)
+	if err != nil {
+		t.Fatalf("unexpected error while loading test posts: %v", err)
+	}
+
+	err = db.AddPosts(testPosts)
+	if err != nil {
+		t.Fatalf("unexpected error while adding posts: %v", err)
+	}
+
+	api := New(db)
+	targetPost := testPosts[0]
+	targetPostID := targetPost.ID
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/news/%s", targetPostID.String()), nil)
+	rr := httptest.NewRecorder()
+
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("want status code %v, got status code %v", http.StatusOK, rr.Code)
+	}
+
+	b, err := io.ReadAll(rr.Body)
+	if err != nil {
+		t.Fatalf("unexpected error while reading response body: %v", err)
+	}
+
+	var gotPost storage.Post
+	err = json.Unmarshal(b, &gotPost)
+	if err != nil {
+		t.Errorf("unexpected error while unmarshaling post data: %v", err)
+	}
+
+	if !reflect.DeepEqual(targetPost, gotPost) {
+		t.Errorf("want post\n%+v\n\ngot post\n%+v\n", targetPost, gotPost)
+	}
+}
+
+func TestAPI_postDetailedHandlerNotExist(t *testing.T) {
+	db := memdb.New()
+	api := New(db)
+
+	targetPostID, err := uuid.FromString("01234567-89ab-cdef-0123-456789abcdef")
+	if err != nil {
+		t.Fatalf("unexpected error while parsing UUID: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/news/%s", targetPostID.String()), nil)
+	rr := httptest.NewRecorder()
+
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("want status code %v, got status code %v", http.StatusNotFound, rr.Code)
+	}
+}
+
+func TestAPI_postDetailedHandlerInvalidUUID(t *testing.T) {
+	db := memdb.New()
+	api := New(db)
+
+	req := httptest.NewRequest(http.MethodGet, "/news/invalid-uuid", nil)
+	rr := httptest.NewRecorder()
+
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want status code %v, got status code %v", http.StatusBadRequest, rr.Code)
 	}
 }

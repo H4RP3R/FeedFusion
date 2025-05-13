@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"net/http"
 	"strconv"
 
+	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 
@@ -33,6 +35,7 @@ func New(db storage.Storage) *API {
 func (api *API) endpoints() {
 	api.Router.Use(api.headerMiddleware)
 	api.Router.HandleFunc("/news/filter", api.filterPostsHandler).Methods(http.MethodGet)
+	api.Router.HandleFunc("/news/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$}", api.postDetailedHandler).Methods(http.MethodGet)
 	api.Router.HandleFunc("/news/{n}", api.postsHandler).Methods(http.MethodGet)
 }
 
@@ -93,4 +96,35 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("[filterPostsHandler] response sent to: %v", r.RemoteAddr)
+}
+
+func (api *API) postDetailedHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := mux.Vars(r)["id"]
+	id, err := uuid.FromString(idStr)
+	if err != nil {
+		http.Error(w, "Invalid UUID parameter", http.StatusBadRequest)
+		log.Debugf("[postDetailedHandler] from %v: %v", r.RemoteAddr, err)
+		return
+	}
+
+	post, err := api.DB.Post(id)
+	if err != nil {
+		if errors.Is(err, storage.ErrPostNotFound) {
+			http.Error(w, "Post not found", http.StatusNotFound)
+			log.Debugf("[postDetailedHandler] from %v: %v", r.RemoteAddr, err)
+			return
+		}
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[postDetailedHandler] failed to retrieve post: %v", err)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(post)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[postDetailedHandler] failed to encode post data: %v", err)
+		return
+	}
+
+	log.Debugf("[postDetailedHandler] response sent to: %v", r.RemoteAddr)
 }
