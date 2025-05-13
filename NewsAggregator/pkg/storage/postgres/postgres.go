@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v4"
@@ -169,5 +170,31 @@ func (s *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
 		posts = append(posts, p)
 	}
 
+	return
+}
+
+// Post retrieves a post by its ID. It returns the post and an error if any occurs.
+func (s *Store) Post(id uuid.UUID) (post storage.Post, err error) {
+	err = s.db.QueryRow(context.Background(), `
+		SELECT id, title, content, published, link
+		FROM posts
+		WHERE id = $1
+	`,
+		id,
+	).Scan(
+		&post.ID,
+		&post.Title,
+		&post.Content,
+		&post.Published,
+		&post.Link,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = storage.ErrPostNotFound
+		}
+		return
+	}
+
+	post.Published = post.Published.UTC()
 	return
 }

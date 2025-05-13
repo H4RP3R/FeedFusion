@@ -2,14 +2,15 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"news/pkg/storage"
+	"news/pkg/storage/memdb"
 	"os"
 	"reflect"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	log "github.com/sirupsen/logrus"
-
-	"news/pkg/storage"
-	"news/pkg/storage/memdb"
 )
 
 const testPostsPath = "../../../test_data/post_examples.json"
@@ -271,5 +272,60 @@ func TestStore_FilterPosts(t *testing.T) {
 				t.Errorf("want posts %d, got %d", tt.wantMatchCnt, len(posts))
 			}
 		})
+	}
+}
+
+func TestStore_Post(t *testing.T) {
+	db, err := storageConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		err := truncatePosts(db)
+		if err != nil {
+			t.Errorf("unexpected error clearing posts table: %v", err)
+		}
+
+		db.Close()
+	})
+
+	testPosts, err := memdb.LoadTestPosts(testPostsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, post := range testPosts {
+		testPosts[i].ID, err = db.AddPost(post)
+		if err != nil {
+			t.Fatalf("unexpected error while populating DB: %v", err)
+		}
+	}
+
+	targetPost := testPosts[0]
+
+	gotPost, err := db.Post(targetPost.ID)
+	if err != nil {
+		t.Errorf("unexpected error retrieving post %v from DB: %v", targetPost.ID, err)
+	}
+	if !reflect.DeepEqual(gotPost, targetPost) {
+		t.Errorf("want post\n%+v\ngot post\n%+v\n", targetPost, gotPost)
+	}
+}
+
+func TestStore_PostNotExist(t *testing.T) {
+	db, err := storageConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	wantErr := storage.ErrPostNotFound
+	post, gotErr := db.Post(uuid.FromStringOrNil("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"))
+	if !errors.Is(gotErr, wantErr) {
+		t.Errorf("want error %v, got %v", wantErr, gotErr)
+	}
+	if !reflect.DeepEqual(post, storage.Post{}) {
+		t.Errorf("want empty post, got post %+v", post)
 	}
 }
