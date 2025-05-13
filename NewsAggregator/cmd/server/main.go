@@ -22,6 +22,8 @@ import (
 )
 
 func main() {
+	log.SetLevel(log.DebugLevel)
+
 	var (
 		sdb storage.Storage
 		dev bool
