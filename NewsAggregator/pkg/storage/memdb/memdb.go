@@ -44,26 +44,44 @@ func (db *Store) AddPosts(posts []storage.Post) (err error) {
 	return
 }
 
-func (db *Store) Posts(n int) (posts []storage.Post, err error) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	for _, v := range db.posts {
-		posts = append(posts, v)
+func (db *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int, err error) {
+	if limit <= 0 {
+		return []storage.Post{}, 0, nil
 	}
 
-	sort.Slice(posts, func(i, j int) bool {
-		return posts[i].Published.After(posts[j].Published)
+	db.mu.Lock()
+	allPosts := make([]storage.Post, 0, len(db.posts))
+	for _, v := range db.posts {
+		allPosts = append(allPosts, v)
+	}
+	db.mu.Unlock()
+
+	sort.Slice(allPosts, func(i, j int) bool {
+		return allPosts[i].Published.After(allPosts[j].Published)
 	})
 
-	if n > len(posts) {
-		n = len(posts)
+	totalPosts := len(allPosts)
+	numPages = (totalPosts + limit - 1) / limit
+
+	pageIndex := page - 1
+	if pageIndex < 0 {
+		pageIndex = 0
 	}
 
-	return posts[:n], nil
+	start := pageIndex * limit
+	if start >= totalPosts {
+		return []storage.Post{}, numPages, nil
+	}
+
+	end := start + limit
+	if end > totalPosts {
+		end = totalPosts
+	}
+
+	return allPosts[start:end], numPages, nil
 }
 
-func (db *Store) FilterPosts(contains string) (posts []storage.Post, err error) {
+func (db *Store) FilterPosts(contains string, page, limit int) (posts []storage.Post, numPages int, err error) {
 	return
 }
 

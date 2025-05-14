@@ -181,7 +181,7 @@ func TestStore_AddPosts(t *testing.T) {
 	}
 }
 
-func TestStore_Posts(t *testing.T) {
+func TestStore_LatestPosts(t *testing.T) {
 	db, err := storageConnect()
 	if err != nil {
 		t.Fatal(err)
@@ -196,6 +196,113 @@ func TestStore_Posts(t *testing.T) {
 		db.Close()
 	})
 
+	tests := []struct {
+		name         string
+		currentPage  int
+		itemsPerPage int
+		wantTitles   []string
+		wantPagesNum int
+		wantErr      bool
+	}{
+		{
+			name:         "First page, 5 per page",
+			currentPage:  1,
+			itemsPerPage: 5,
+			wantTitles: []string{
+				"A Tale of a Cat",
+				"Кириллица в названии",
+				"Post 18",
+				"Post 17",
+				"Post 16",
+			},
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+		{
+			name:         "Second page, 5 per page",
+			currentPage:  2,
+			itemsPerPage: 5,
+			wantTitles: []string{
+				"Post 15",
+				"Post 14",
+				"Post 13",
+				"Post 12",
+				"Post 11",
+			},
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+		{
+			name:         "Third page, 5 per page",
+			currentPage:  3,
+			itemsPerPage: 5,
+			wantTitles: []string{
+				"Post 10",
+				"Post 9",
+				"Post 8",
+				"Post 7",
+				"Post 6",
+			},
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+		{
+			name:         "Fourth page, 5 per page",
+			currentPage:  4,
+			itemsPerPage: 5,
+			wantTitles: []string{
+				"Post 5",
+				"Post 4",
+				"Post 3",
+				"Post 2",
+				"Post 1",
+			},
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+		{
+			name:         "Page out of range",
+			currentPage:  5,
+			itemsPerPage: 5,
+			wantTitles:   nil,
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+		{
+			name:         "Zero items per page (uses default 10)",
+			currentPage:  1,
+			itemsPerPage: 0,
+			wantTitles: []string{
+				"A Tale of a Cat",
+				"Кириллица в названии",
+				"Post 18",
+				"Post 17",
+				"Post 16",
+				"Post 15",
+				"Post 14",
+				"Post 13",
+				"Post 12",
+				"Post 11",
+			},
+			wantPagesNum: 2, // 20 posts / 10 per page = 2 pages
+			wantErr:      false,
+		},
+		{
+			name:         "Negative page number (uses default page 1)",
+			currentPage:  -1,
+			itemsPerPage: 5,
+			wantTitles: []string{
+				"A Tale of a Cat",
+				"Кириллица в названии",
+				"Post 18",
+				"Post 17",
+				"Post 16",
+			},
+			wantPagesNum: 4,
+			wantErr:      false,
+		},
+	}
+
 	testPosts, err := memdb.LoadTestPosts(testPostsPath)
 	if err != nil {
 		t.Fatal(err)
@@ -208,15 +315,26 @@ func TestStore_Posts(t *testing.T) {
 		}
 	}
 
-	for n := 1; n < len(testPosts); n++ {
-		posts, err := db.Posts(n)
-		if err != nil {
-			t.Errorf("unexpected error retrieving %d posts from DB", n)
-		}
-		wantPosts := testPosts[:n]
-		if !reflect.DeepEqual(posts, wantPosts) {
-			t.Errorf("want posts\n%+v\ngot posts\n%+v\n", wantPosts, posts)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			posts, pagesNum, err := db.LatestPosts(tt.currentPage, tt.itemsPerPage)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("LatestPosts() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if pagesNum != tt.wantPagesNum {
+				t.Errorf("LatestPosts() pagesNum = %v, want %v", pagesNum, tt.wantPagesNum)
+			}
+
+			var gotTitles []string
+			for _, p := range posts {
+				gotTitles = append(gotTitles, p.Title)
+			}
+
+			if !reflect.DeepEqual(gotTitles, tt.wantTitles) {
+				t.Errorf("LatestPosts() titles = %v, want %v", gotTitles, tt.wantTitles)
+			}
+		})
 	}
 }
 
@@ -264,9 +382,9 @@ func TestStore_FilterPosts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			posts, err := db.FilterPosts(tt.text)
+			posts, _, err := db.FilterPosts(tt.text, 1, 100)
 			if err != nil {
-				t.Errorf("FilterPosts() returned error: %v", err)
+				t.Fatalf("FilterPosts() returned error: %v", err)
 			}
 			if len(posts) != tt.wantMatchCnt {
 				t.Errorf("want posts %d, got %d", tt.wantMatchCnt, len(posts))

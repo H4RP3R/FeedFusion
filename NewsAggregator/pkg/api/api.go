@@ -3,10 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"strconv"
 
 	"net/http"
-	"strconv"
 
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
@@ -35,42 +34,39 @@ func New(db storage.Storage) *API {
 func (api *API) endpoints() {
 	api.Router.Use(api.headerMiddleware)
 	api.Router.HandleFunc("/news/filter", api.filterPostsHandler).Methods(http.MethodGet)
+	api.Router.HandleFunc("/news/latest", api.latestPostsHandler).Methods(http.MethodGet)
 	api.Router.HandleFunc("/news/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$}", api.postDetailedHandler).Methods(http.MethodGet)
-	api.Router.HandleFunc("/news/{n}", api.postsHandler).Methods(http.MethodGet)
 }
 
-// postsHandler handles GET requests to /news/{n} and returns n latest posts from
-// the underlying storage in JSON format.
-func (api *API) postsHandler(w http.ResponseWriter, r *http.Request) {
-	nStr := mux.Vars(r)["n"]
-	n, err := strconv.Atoi(nStr)
+func (api *API) latestPostsHandler(w http.ResponseWriter, r *http.Request) {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || limit < 1 {
+		limit = 10
+	}
+
+	posts, numPages, err := api.DB.LatestPosts(page, limit)
 	if err != nil {
-		http.Error(w, "400 Bad Request", http.StatusBadRequest)
-		log.Infof("[postsHandler] from %v: %v", r.RemoteAddr, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[postsHandler] LatestPosts() returned error: %v", err)
 		return
 	}
 
-	if n < 1 || n > 1000 {
-		http.Error(w, fmt.Sprintf("Invalid news num (1 <= n <= %d)", maxPosts), http.StatusBadRequest)
-		log.Infof("[postsHandler] from %v: %v", r.RemoteAddr, "Invalid news num")
+	resp := PostsResponse{
+		Posts:      posts,
+		Pagination: Pagination{TotalPages: numPages, CurrentPage: page, Limit: limit},
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Errorf("[postsHandler] failed to encode response data: %v", err)
 		return
 	}
 
-	posts, err := api.DB.Posts(n)
-	if err != nil {
-		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
-		log.Errorf("[postsHandler] status %v: %v", http.StatusInternalServerError, err)
-		return
-	}
-
-	err = json.NewEncoder(w).Encode(posts)
-	if err != nil {
-		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
-		log.Errorf("[postsHandler] status %v: %v", http.StatusInternalServerError, err)
-		return
-	}
-
-	log.Infof("[postsHandler] response sent to %v", r.RemoteAddr)
+	log.Debugf("[postsHandler] response sent to: %v", r.RemoteAddr)
 }
 
 func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,18 +76,30 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Debugf("[filterPostsHandler] request with empty parameter from: %v", r.RemoteAddr)
 		return
 	}
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || limit < 1 {
+		limit = 10
+	}
 
-	posts, err := api.DB.FilterPosts(contains)
+	posts, numPages, err := api.DB.FilterPosts(contains, page, limit)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Errorf("[filterPostsHandler] FilterPosts() returned error: %v", err)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(posts)
-	if err != nil {
+	resp := PostsResponse{
+		Posts:      posts,
+		Pagination: Pagination{TotalPages: numPages, CurrentPage: page, Limit: limit},
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		log.Errorf("[filterPostsHandler] failed to encode posts data: %v", err)
+		log.Errorf("[postsHandler] failed to encode response data: %v", err)
 		return
 	}
 

@@ -31,14 +31,15 @@ type Storage interface {
 	// AddPosts adds multiple posts to the storage and returns an error if any occurs.
 	AddPosts(posts []Post) (err error)
 
-	// Posts retrieves the 'n' newest posts from the storage and an error if any occurs.
-	Posts(n int) (posts []Post, err error)
+	// LatestPosts fetches recent posts in descending order by date.
+	// Returns a list of posts, total page count, and an error if any occurs.
+	LatestPosts(currentPage, limit int) (posts []Post, numPages int, err error)
 
 	// Post retrieves a post by its ID. It returns the post and an error if any occurs.
 	Post(id uuid.UUID) (post Post, err error)
 
 	// FilterPosts returns a list of posts whose titles contain the given substring.
-	FilterPosts(contains string) (posts []Post, err error)
+	FilterPosts(contains string, page, limit int) (posts []Post, numPages int, err error)
 }
 
 // ValidatePosts accepts a slice of posts and removes the invalid ones, i.e., posts containing any empty fields.
