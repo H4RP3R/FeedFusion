@@ -152,7 +152,6 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 	}
 
 	var gotPost models.Post
-	t.Log(rr.Body.String())
 	b, err := io.ReadAll(rr.Body)
 	if err != nil {
 		t.Fatalf("failed to read response body: %v", err)
