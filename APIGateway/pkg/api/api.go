@@ -123,7 +123,7 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 	targetURL := fmt.Sprintf("%s/news/filter?contains=%s", newsServiceURL, url.QueryEscape(contains))
 
-	proxyReq, err := http.NewRequest(r.Method, targetURL, nil)
+	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
 		log.Errorf("[filterNewsProxy][from:%v] error creating proxy request: %v", r.RemoteAddr, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
