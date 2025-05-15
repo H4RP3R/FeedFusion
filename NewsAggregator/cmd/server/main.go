@@ -25,8 +25,10 @@ func main() {
 	log.SetLevel(log.DebugLevel)
 
 	var (
-		sdb storage.Storage
-		dev bool
+		sdb      storage.Storage
+		dev      bool
+		httpAddr string
+		logLevel string
 	)
 
 	var (
@@ -37,7 +39,20 @@ func main() {
 
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	flag.BoolVar(&dev, "dev", false, "Run the server in development mode with in-memory DB.")
+	flag.StringVar(&httpAddr, "http", ":8066", "HTTP server address in the form 'host:port'.")
+	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
 	flag.Parse()
+
+	switch logLevel {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	}
 
 	switch dev {
 	case false:
@@ -120,7 +135,7 @@ func main() {
 	}()
 
 	server := &http.Server{
-		Addr:    ":8066",
+		Addr:    httpAddr,
 		Handler: api.Router,
 	}
 
