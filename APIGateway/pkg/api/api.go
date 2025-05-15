@@ -54,26 +54,9 @@ func New(confPath string) (*API, error) {
 }
 
 func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
-	pageStr := r.URL.Query().Get("page")
-	page := 1
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
+	page, limit := parsePagination(r, 100)
 
-	itemsPerPageStr := r.URL.Query().Get("limit")
-	itemsPerPage := 10
-	if itemsPerPageStr != "" {
-		if p, err := strconv.Atoi(itemsPerPageStr); err == nil && p > 0 {
-			itemsPerPage = p
-		}
-	}
-	if itemsPerPage > 100 {
-		itemsPerPage = 100
-	}
-
-	targetURL := fmt.Sprintf("%s/news/latest?page=%d&limit=%d", api.Services["Aggregator"].URL, page, itemsPerPage)
+	targetURL := fmt.Sprintf("%s/news/latest?page=%d&limit=%d", api.Services["Aggregator"].URL, page, limit)
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
@@ -115,7 +98,13 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL := fmt.Sprintf("%s/news/filter?contains=%s", api.Services["Aggregator"].URL, url.QueryEscape(contains))
+	page, limit := parsePagination(r, 100)
+
+	targetURL := fmt.Sprintf(
+		"%s/news/filter?contains=%s&page=%d&limit=%d",
+		api.Services["Aggregator"].URL,
+		url.QueryEscape(contains),
+		page, limit)
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
@@ -324,4 +313,32 @@ func cloneHeaderNoHop(header http.Header) http.Header {
 	}
 
 	return h
+}
+
+// parsePagination extracts and validates 'page' and 'limit' query parameters from the request.
+// It returns default values if parameters are missing or invalid.
+// 'maxLimit' caps the maximum allowed limit to prevent abuse.
+func parsePagination(r *http.Request, maxLimit int) (page, limit int) {
+	page = 1
+	limit = 10
+
+	pageStr := r.URL.Query().Get("page")
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	return
 }
