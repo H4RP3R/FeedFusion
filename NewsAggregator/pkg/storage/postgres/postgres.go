@@ -7,7 +7,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	log "github.com/sirupsen/logrus"
 
 	"news/pkg/storage"
 )
@@ -59,11 +58,8 @@ func (s *Store) AddPost(post storage.Post) (id uuid.UUID, err error) {
 		post.Link,
 	).Scan(&id)
 	if err != nil {
-		log.Errorf("error adding post: %v", err)
 		return
 	}
-
-	log.Infof("post ID:%v added successfully", id)
 
 	return
 }
