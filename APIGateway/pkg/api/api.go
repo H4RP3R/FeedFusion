@@ -82,16 +82,7 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq.Header = r.Header.Clone()
-	// Remove hop-by-hop headers
-	proxyReq.Header.Del("Connection")
-	proxyReq.Header.Del("Keep-Alive")
-	proxyReq.Header.Del("Proxy-Authenticate")
-	proxyReq.Header.Del("Proxy-Authorization")
-	proxyReq.Header.Del("TE")
-	proxyReq.Header.Del("Trailer")
-	proxyReq.Header.Del("Transfer-Encoding")
-	proxyReq.Header.Del("Upgrade")
+	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
 	client := &http.Client{Timeout: httpClientTimeout}
 
