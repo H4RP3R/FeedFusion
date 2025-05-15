@@ -1,6 +1,7 @@
 package memdb
 
 import (
+	"context"
 	"reflect"
 	"slices"
 	"testing"
@@ -26,7 +27,7 @@ func TestDB_AddPost(t *testing.T) {
 	}
 
 	for _, post := range testPosts {
-		gotID, err := db.AddPost(post)
+		gotID, err := db.AddPost(context.Background(), post)
 		if err != nil {
 			t.Errorf("unexpected error while adding post: %v", err)
 		}
@@ -48,7 +49,7 @@ func TestDB_AddPosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = db.AddPosts(testPosts)
+	err = db.AddPosts(context.Background(), testPosts)
 	if err != nil {
 		t.Errorf("unexpected error while adding posts: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestDB_LatestPosts(t *testing.T) {
 
 	var err error
 	for i, post := range testPosts {
-		testPosts[i].ID, err = db.AddPost(post)
+		testPosts[i].ID, err = db.AddPost(context.Background(), post)
 		if err != nil {
 			t.Fatalf("unexpected error while adding posts: %v", err)
 		}
@@ -183,7 +184,7 @@ func TestDB_LatestPosts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			posts, pagesNum, err := db.LatestPosts(tt.currentPage, tt.limit)
+			posts, pagesNum, err := db.LatestPosts(context.Background(), tt.currentPage, tt.limit)
 			if err != nil {
 				t.Fatalf("LatestPosts returned error: %v", err)
 			}

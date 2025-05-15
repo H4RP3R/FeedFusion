@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +34,9 @@ func TestAPI_latestPostsHandler(t *testing.T) {
 		t.Fatalf("unexpected error while loading test posts: %v", err)
 	}
 
-	err = db.AddPosts(testPosts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = db.AddPosts(ctx, testPosts)
 	if err != nil {
 		t.Fatalf("unexpected error while adding posts: %v", err)
 	}
@@ -117,7 +120,9 @@ func TestAPI_postDetailedHandler(t *testing.T) {
 		t.Fatalf("unexpected error while loading test posts: %v", err)
 	}
 
-	err = db.AddPosts(testPosts)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = db.AddPosts(ctx, testPosts)
 	if err != nil {
 		t.Fatalf("unexpected error while adding posts: %v", err)
 	}

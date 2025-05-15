@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"time"
@@ -26,21 +27,21 @@ type Post struct {
 
 type Storage interface {
 	// AddPost adds a single post to the storage and returns the post ID and an error if any occurs.
-	AddPost(post Post) (id uuid.UUID, err error)
+	AddPost(ctx context.Context, post Post) (id uuid.UUID, err error)
 
 	// AddPosts adds multiple posts to the storage and returns an error if any occurs.
-	AddPosts(posts []Post) (err error)
+	AddPosts(ctx context.Context, posts []Post) (err error)
 
 	// LatestPosts fetches recent posts in descending order by date.
 	// Returns a list of posts, total page count, and an error if any occurs.
-	LatestPosts(currentPage, limit int) (posts []Post, numPages int, err error)
+	LatestPosts(ctx context.Context, currentPage, limit int) (posts []Post, numPages int, err error)
 
 	// Post retrieves a post by its ID. It returns the post and an error if any occurs.
-	Post(id uuid.UUID) (post Post, err error)
+	Post(ctx context.Context, id uuid.UUID) (post Post, err error)
 
 	// FilterPosts returns a list of posts whose titles contain the given substring,
 	// total page count and an error if any occurs.
-	FilterPosts(contains string, page, limit int) (posts []Post, numPages int, err error)
+	FilterPosts(ctx context.Context, contains string, page, limit int) (posts []Post, numPages int, err error)
 }
 
 // ValidatePosts accepts a slice of posts and removes the invalid ones, i.e., posts containing any empty fields.

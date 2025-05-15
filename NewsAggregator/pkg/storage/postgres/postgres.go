@@ -15,8 +15,8 @@ type Store struct {
 	db *pgxpool.Pool
 }
 
-func New(conStr string) (*Store, error) {
-	db, err := pgxpool.Connect(context.Background(), conStr)
+func New(ctx context.Context, conStr string) (*Store, error) {
+	db, err := pgxpool.Connect(ctx, conStr)
 	if err != nil {
 		return nil, err
 	}
@@ -27,8 +27,8 @@ func New(conStr string) (*Store, error) {
 	return &s, nil
 }
 
-func (s *Store) Ping() error {
-	return s.db.Ping(context.Background())
+func (s *Store) Ping(ctx context.Context) error {
+	return s.db.Ping(ctx)
 }
 
 func (s *Store) Close() {
@@ -38,9 +38,9 @@ func (s *Store) Close() {
 // AddPost inserts a single post into the database or updates it if a post with the same ID already exists.
 // The post ID is generated as a UUIDv5 based on the post's Link.
 // The method returns the ID of the inserted or updated post and an error if any occurs.
-func (s *Store) AddPost(post storage.Post) (id uuid.UUID, err error) {
+func (s *Store) AddPost(ctx context.Context, post storage.Post) (id uuid.UUID, err error) {
 	post.ID = uuid.NewV5(uuid.NamespaceURL, post.Link)
-	err = s.db.QueryRow(context.Background(), `
+	err = s.db.QueryRow(ctx, `
 		INSERT INTO posts (id, title, content, published, link)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (id)
@@ -68,8 +68,7 @@ func (s *Store) AddPost(post storage.Post) (id uuid.UUID, err error) {
 // For each post, it generates a UUIDv5 based on the post's Link to use as the ID.
 // If a post with the same ID already exists, it updates the existing record with the new data.
 // Returns an error if beginning the transaction, executing the batch, or committing fails.
-func (s *Store) AddPosts(posts []storage.Post) (err error) {
-	ctx := context.Background()
+func (s *Store) AddPosts(ctx context.Context, posts []storage.Post) (err error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -111,7 +110,7 @@ func (s *Store) AddPosts(posts []storage.Post) (err error) {
 // If page or limit are less than or equal to zero, they default to 1 and 10 respectively.
 // The method returns the posts for the requested page, the total number of pages available,
 // and any error encountered during the database queries.
-func (s *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int, err error) {
+func (s *Store) LatestPosts(ctx context.Context, page, limit int) (posts []storage.Post, numPages int, err error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -121,7 +120,7 @@ func (s *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int
 
 	offset := (page - 1) * limit
 
-	rows, err := s.db.Query(context.Background(), `
+	rows, err := s.db.Query(ctx, `
         SELECT id, title, content, published, link
         FROM posts
         ORDER BY published DESC
@@ -153,7 +152,7 @@ func (s *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int
 	}
 
 	var totalPosts int
-	err = s.db.QueryRow(context.Background(), `SELECT COUNT(id) FROM posts`).Scan(&totalPosts)
+	err = s.db.QueryRow(ctx, `SELECT COUNT(id) FROM posts`).Scan(&totalPosts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -167,9 +166,9 @@ func (s *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int
 // It returns the list of matching posts for the specified page and limit,
 // along with the total number of pages available for the given filter and page size.
 // Returns an error if any occurs.
-func (s *Store) FilterPosts(contains string, page, limit int) (posts []storage.Post, numPages int, err error) {
+func (s *Store) FilterPosts(ctx context.Context, contains string, page, limit int) ([]storage.Post, int, error) {
 	if contains == "" {
-		return
+		return nil, 0, nil
 	}
 	if limit <= 0 {
 		limit = 10
@@ -180,7 +179,7 @@ func (s *Store) FilterPosts(contains string, page, limit int) (posts []storage.P
 
 	offset := (page - 1) * limit
 
-	rows, err := s.db.Query(context.Background(), `
+	rows, err := s.db.Query(ctx, `
 		SELECT id, title, content, published, link
 		FROM posts
 		WHERE title ILIKE $1
@@ -195,6 +194,7 @@ func (s *Store) FilterPosts(contains string, page, limit int) (posts []storage.P
 	}
 	defer rows.Close()
 
+	var posts []storage.Post
 	for rows.Next() {
 		var p storage.Post
 		err := rows.Scan(
@@ -214,7 +214,7 @@ func (s *Store) FilterPosts(contains string, page, limit int) (posts []storage.P
 	}
 
 	var totalPosts int
-	err = s.db.QueryRow(context.Background(), `
+	err = s.db.QueryRow(ctx, `
 	SELECT COUNT(id) FROM posts WHERE title ILIKE $1
 	`,
 		"%"+contains+"%",
@@ -223,13 +223,13 @@ func (s *Store) FilterPosts(contains string, page, limit int) (posts []storage.P
 		return nil, 0, err
 	}
 
-	numPages = (totalPosts + limit - 1) / limit
-	return
+	numPages := (totalPosts + limit - 1) / limit
+	return posts, numPages, nil
 }
 
 // Post retrieves a post by its ID. It returns the post and an error if any occurs.
-func (s *Store) Post(id uuid.UUID) (post storage.Post, err error) {
-	err = s.db.QueryRow(context.Background(), `
+func (s *Store) Post(ctx context.Context, id uuid.UUID) (post storage.Post, err error) {
+	err = s.db.QueryRow(ctx, `
 		SELECT id, title, content, published, link
 		FROM posts
 		WHERE id = $1

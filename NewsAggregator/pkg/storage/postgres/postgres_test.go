@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	log "github.com/sirupsen/logrus"
@@ -41,12 +42,14 @@ func postgresConf() Config {
 
 func storageConnect() (*Store, error) {
 	conf := postgresConf()
-	db, err := New(conf.ConString())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := New(ctx, conf.ConString())
 	if err != nil {
 		return nil, storage.ErrConnectDB
 	}
 
-	err = db.Ping()
+	err = db.Ping(ctx)
 	if err != nil {
 		return nil, storage.ErrDBNotResponding
 	}
@@ -56,7 +59,9 @@ func storageConnect() (*Store, error) {
 
 // truncatePosts restores the original state of DB for further testing.
 func truncatePosts(db *Store) error {
-	_, err := db.db.Exec(context.Background(), "TRUNCATE TABLE posts")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := db.db.Exec(ctx, "TRUNCATE TABLE posts")
 	if err != nil {
 		return err
 	}
@@ -90,8 +95,10 @@ func TestStore_AddPost(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	for i, post := range testPosts {
-		testPosts[i].ID, err = db.AddPost(post)
+		testPosts[i].ID, err = db.AddPost(ctx, post)
 		if err != nil {
 			t.Errorf("unexpected error while adding post: %v", err)
 		}
@@ -99,7 +106,7 @@ func TestStore_AddPost(t *testing.T) {
 
 	for _, post := range testPosts {
 		var gotPost storage.Post
-		err := db.db.QueryRow(context.Background(), `
+		err := db.db.QueryRow(ctx, `
 			SELECT id, title, content, published, link
 			FROM posts
 			WHERE id = $1
@@ -142,12 +149,14 @@ func TestStore_AddPosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = db.AddPosts(testPosts)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = db.AddPosts(ctx, testPosts)
 	if err != nil {
 		t.Errorf("unexpected error while adding multiple posts: %v", err)
 	}
 
-	rows, err := db.db.Query(context.Background(), `
+	rows, err := db.db.Query(ctx, `
 		SELECT id, title, content, published, link
 		FROM posts
 	`)
@@ -308,8 +317,10 @@ func TestStore_LatestPosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	for i, post := range testPosts {
-		testPosts[i].ID, err = db.AddPost(post)
+		testPosts[i].ID, err = db.AddPost(ctx, post)
 		if err != nil {
 			t.Fatalf("unexpected error while populating DB: %v", err)
 		}
@@ -317,7 +328,7 @@ func TestStore_LatestPosts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			posts, pagesNum, err := db.LatestPosts(tt.currentPage, tt.itemsPerPage)
+			posts, pagesNum, err := db.LatestPosts(ctx, tt.currentPage, tt.itemsPerPage)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("LatestPosts() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -373,8 +384,10 @@ func TestStore_FilterPosts(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	for i, post := range testPosts {
-		testPosts[i].ID, err = db.AddPost(post)
+		testPosts[i].ID, err = db.AddPost(ctx, post)
 		if err != nil {
 			t.Fatalf("unexpected error while populating DB: %v", err)
 		}
@@ -382,7 +395,7 @@ func TestStore_FilterPosts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			posts, _, err := db.FilterPosts(tt.text, 1, 100)
+			posts, _, err := db.FilterPosts(ctx, tt.text, 1, 100)
 			if err != nil {
 				t.Fatalf("FilterPosts() returned error: %v", err)
 			}
@@ -413,8 +426,10 @@ func TestStore_Post(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	for i, post := range testPosts {
-		testPosts[i].ID, err = db.AddPost(post)
+		testPosts[i].ID, err = db.AddPost(ctx, post)
 		if err != nil {
 			t.Fatalf("unexpected error while populating DB: %v", err)
 		}
@@ -422,7 +437,7 @@ func TestStore_Post(t *testing.T) {
 
 	targetPost := testPosts[0]
 
-	gotPost, err := db.Post(targetPost.ID)
+	gotPost, err := db.Post(ctx, targetPost.ID)
 	if err != nil {
 		t.Errorf("unexpected error retrieving post %v from DB: %v", targetPost.ID, err)
 	}
@@ -443,7 +458,10 @@ func TestStore_PostNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error while parsing UUID: %v", err)
 	}
-	post, gotErr := db.Post(targetPostID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	post, gotErr := db.Post(ctx, targetPostID)
 	if !errors.Is(gotErr, wantErr) {
 		t.Errorf("want error %v, got %v", wantErr, gotErr)
 	}

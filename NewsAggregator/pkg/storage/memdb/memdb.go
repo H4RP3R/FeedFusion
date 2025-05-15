@@ -1,6 +1,7 @@
 package memdb
 
 import (
+	"context"
 	"sort"
 	"sync"
 
@@ -22,7 +23,7 @@ func New() *Store {
 	return &db
 }
 
-func (db *Store) AddPost(post storage.Post) (id uuid.UUID, err error) {
+func (db *Store) AddPost(ctx context.Context, post storage.Post) (id uuid.UUID, err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -32,7 +33,7 @@ func (db *Store) AddPost(post storage.Post) (id uuid.UUID, err error) {
 	return post.ID, nil
 }
 
-func (db *Store) AddPosts(posts []storage.Post) (err error) {
+func (db *Store) AddPosts(ctx context.Context, posts []storage.Post) (err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -44,7 +45,7 @@ func (db *Store) AddPosts(posts []storage.Post) (err error) {
 	return
 }
 
-func (db *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages int, err error) {
+func (db *Store) LatestPosts(ctx context.Context, page, limit int) (posts []storage.Post, numPages int, err error) {
 	if limit <= 0 {
 		return []storage.Post{}, 0, nil
 	}
@@ -81,11 +82,11 @@ func (db *Store) LatestPosts(page, limit int) (posts []storage.Post, numPages in
 	return allPosts[start:end], numPages, nil
 }
 
-func (db *Store) FilterPosts(contains string, page, limit int) (posts []storage.Post, numPages int, err error) {
+func (db *Store) FilterPosts(ctx context.Context, contains string, page, limit int) (posts []storage.Post, numPages int, err error) {
 	return
 }
 
-func (db *Store) Post(id uuid.UUID) (post storage.Post, err error) {
+func (db *Store) Post(ctx context.Context, id uuid.UUID) (post storage.Post, err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 

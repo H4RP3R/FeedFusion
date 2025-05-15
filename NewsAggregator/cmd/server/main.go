@@ -72,13 +72,15 @@ func main() {
 			log.Fatal(fmt.Errorf("invalid postgres config: %+v", conf))
 		}
 
-		db, err := postgres.New(conf.ConString())
+		ctx, cancel := context.WithTimeout(context.Background(), 10)
+		defer cancel()
+		db, err := postgres.New(ctx, conf.ConString())
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer db.Close()
 
-		err = db.Ping()
+		err = db.Ping(ctx)
 		if err != nil {
 			log.Fatal(fmt.Errorf("%w: %v", storage.ErrDBNotResponding, err))
 		}
@@ -107,11 +109,14 @@ func main() {
 			wg.Done()
 		}()
 
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		for msg := range msgChan {
 			if msg.Err != nil {
 				log.Warnf("Error while parsing %s: %v", msg.Source, msg.Err)
 			} else {
-				err := api.DB.AddPosts(storage.ValidatePosts(msg.Data...))
+				err := api.DB.AddPosts(ctx, storage.ValidatePosts(msg.Data...))
 				if err != nil {
 					log.Warnf("Error while adding posts from %s to DB: %v", msg.Source, err)
 				} else {

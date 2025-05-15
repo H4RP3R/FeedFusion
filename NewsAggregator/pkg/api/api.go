@@ -54,7 +54,7 @@ func (api *API) latestPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, numPages, err := api.DB.LatestPosts(page, limit)
+	posts, numPages, err := api.DB.LatestPosts(r.Context(), page, limit)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Errorf("[postsHandler] LatestPosts() returned error: %v", err)
@@ -96,7 +96,7 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, numPages, err := api.DB.FilterPosts(contains, page, limit)
+	posts, numPages, err := api.DB.FilterPosts(r.Context(), contains, page, limit)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Errorf("[filterPostsHandler] FilterPosts() returned error: %v", err)
@@ -126,7 +126,7 @@ func (api *API) postDetailedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post, err := api.DB.Post(id)
+	post, err := api.DB.Post(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, storage.ErrPostNotFound) {
 			http.Error(w, "Post not found", http.StatusNotFound)
