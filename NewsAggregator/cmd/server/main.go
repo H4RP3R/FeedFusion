@@ -72,7 +72,7 @@ func main() {
 			log.Fatal(fmt.Errorf("invalid postgres config: %+v", conf))
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		db, err := postgres.New(ctx, conf.ConString())
 		if err != nil {
