@@ -66,6 +66,20 @@ func TestAPI_latestPostsHandler(t *testing.T) {
 	}
 }
 
+func TestAPI_postDetailedHandlerLimitExceeded(t *testing.T) {
+	db := memdb.New()
+	api := New(db)
+
+	// Expect 400
+	path := fmt.Sprintf("/news/latest?page=1&limit=%d", maxPostsLimit+1)
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rr := httptest.NewRecorder()
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want status code %v, got %v", http.StatusBadRequest, rr.Code)
+	}
+}
+
 func TestAPI_filterPostsHandler(t *testing.T) {
 	db := memdb.New()
 	api := New(db)
@@ -80,6 +94,15 @@ func TestAPI_filterPostsHandler(t *testing.T) {
 
 	// Expect 400
 	req = httptest.NewRequest(http.MethodGet, "/news/filter?contains=", nil)
+	rr = httptest.NewRecorder()
+	api.Router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want status code %v, got %v", http.StatusBadRequest, rr.Code)
+	}
+
+	// Expect 400
+	path := fmt.Sprintf("/news/filter?contains=some_text&page=1&limit=%d", maxPostsLimit+1)
+	req = httptest.NewRequest(http.MethodGet, path, nil)
 	rr = httptest.NewRecorder()
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {

@@ -14,7 +14,7 @@ import (
 	"news/pkg/storage"
 )
 
-const maxPosts = 1000
+const maxPostsLimit = 100
 
 type API struct {
 	DB     storage.Storage
@@ -46,6 +46,12 @@ func (api *API) latestPostsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil || limit < 1 {
 		limit = 10
+	}
+
+	if limit > maxPostsLimit {
+		http.Error(w, "Limit parameter is too big", http.StatusBadRequest)
+		log.Debugf("[postsHandler] request with too big limit parameter from: %v", r.RemoteAddr)
+		return
 	}
 
 	posts, numPages, err := api.DB.LatestPosts(page, limit)
@@ -83,6 +89,11 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
 	if err != nil || limit < 1 {
 		limit = 10
+	}
+	if limit > maxPostsLimit {
+		http.Error(w, "Limit parameter is too big", http.StatusBadRequest)
+		log.Debugf("[filterPostsHandler] request with too big limit parameter from: %v", r.RemoteAddr)
+		return
 	}
 
 	posts, numPages, err := api.DB.FilterPosts(contains, page, limit)
