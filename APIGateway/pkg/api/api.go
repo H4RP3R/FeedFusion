@@ -19,14 +19,11 @@ import (
 	"gateway/pkg/models"
 )
 
-const (
-	commentsServiceURL = "http://localhost:8077"
-	newsServiceURL     = "http://localhost:8066"
-	timeout            = 5 * time.Second
-)
+const httpClientTimeout = 5 * time.Second
 
 type API struct {
 	r *mux.Router
+	*Config
 }
 
 func (api *API) Router() *mux.Router {
@@ -43,11 +40,17 @@ func (api *API) endpoints() {
 	api.r.HandleFunc("/comments", api.createCommentProxy).Methods(http.MethodPost)
 }
 
-func New() *API {
+func New(confPath string) (*API, error) {
 	api := API{r: mux.NewRouter()}
 	api.endpoints()
 
-	return &api
+	var err error
+	api.Config, err = loadConfig(confPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api, nil
 }
 
 func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +73,7 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 		itemsPerPage = 100
 	}
 
-	targetURL := fmt.Sprintf("%s/news/latest?page=%d&limit=%d", newsServiceURL, page, itemsPerPage)
+	targetURL := fmt.Sprintf("%s/news/latest?page=%d&limit=%d", api.Services["Aggregator"].URL, page, itemsPerPage)
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
@@ -90,7 +93,7 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 	proxyReq.Header.Del("Transfer-Encoding")
 	proxyReq.Header.Del("Upgrade")
 
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{Timeout: httpClientTimeout}
 
 	resp, err := client.Do(proxyReq)
 	if err != nil {
@@ -121,7 +124,7 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL := fmt.Sprintf("%s/news/filter?contains=%s", newsServiceURL, url.QueryEscape(contains))
+	targetURL := fmt.Sprintf("%s/news/filter?contains=%s", api.Services["Aggregator"].URL, url.QueryEscape(contains))
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
@@ -132,7 +135,7 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: httpClientTimeout}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
 		log.Errorf("[filterNewsProxy][from:%v] error calling news aggregator: %v", r.RemoteAddr, err)
@@ -172,7 +175,7 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 	go func(wg *sync.WaitGroup, client *http.Client) {
 		defer wg.Done()
 
-		url, _ := url.Parse(commentsServiceURL)
+		url, _ := url.Parse(api.Services["Comments"].URL)
 		url = url.JoinPath("comments")
 		values := url.Query()
 		values.Set("post_id", idStr)
@@ -185,7 +188,7 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 	go func(wg *sync.WaitGroup, client *http.Client) {
 		defer wg.Done()
 
-		url, _ := url.Parse(newsServiceURL)
+		url, _ := url.Parse(api.Services["Aggregator"].URL)
 		url = url.JoinPath(url.Path, "news", idStr)
 		fetchResource(client, url.String(), "news aggregator", &models.Post{}, respChan)
 	}(wg, client)
@@ -246,7 +249,7 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL := fmt.Sprint(commentsServiceURL + "/comments")
+	targetURL := fmt.Sprint(api.Services["Comments"].URL + "/comments")
 
 	proxyReq, err := http.NewRequest(r.Method, targetURL, bytes.NewReader(b))
 	if err != nil {
@@ -257,7 +260,7 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: httpClientTimeout}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
 		log.Errorf("[createCommentProxy][from:%v] error calling comments service: %v", r.RemoteAddr, err)

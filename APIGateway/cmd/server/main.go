@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"gateway/pkg/api"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,14 +11,15 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-
-	"gateway/pkg/api"
 )
 
 const serverPort = ":8088"
 
 func main() {
-	api := api.New()
+	api, err := api.New("pkg/api/config.json")
+	if err != nil {
+		log.Fatalf("[server] failed to create API: %v", err)
+	}
 
 	srv := &http.Server{
 		Addr:    serverPort,

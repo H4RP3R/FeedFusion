@@ -1,0 +1,12 @@
+{
+    "services": {
+        "Aggregator": {
+            "url": "http://localhost:8066",
+            "name": "Aggregator"
+        },
+        "Comments": {
+            "url": "http://localhost:8077",
+            "name": "Comments"
+        }
+    }
+}

@@ -19,7 +19,10 @@ import (
 func TestAPI_createCommentProxy(t *testing.T) {
 	defer gock.Off()
 
-	api := New()
+	api, err := New("./config.json")
+	if err != nil {
+		t.Fatalf("failed to create API: %v", err)
+	}
 
 	targetPostID, _ := uuid.NewV4()
 	testComment := models.Comment{
@@ -32,7 +35,7 @@ func TestAPI_createCommentProxy(t *testing.T) {
 		t.Errorf("failed to marshal post: %v", err)
 	}
 
-	gock.New(commentsServiceURL).
+	gock.New(api.Services["Comments"].URL).
 		Reply(http.StatusCreated).
 		JSON(map[string]string{
 			"id":        uuid.NewV5(uuid.NamespaceURL, testComment.Author+testComment.Text).String(),
@@ -93,9 +96,12 @@ func TestAPI_filterNewsProxy(t *testing.T) {
 		},
 	}
 
-	api := New()
+	api, err := New("./config.json")
+	if err != nil {
+		t.Fatalf("failed to create API: %v", err)
+	}
 
-	gock.New(newsServiceURL).Reply(http.StatusOK).JSON(responseNews)
+	gock.New(api.Services["Aggregator"].URL).Reply(http.StatusOK).JSON(responseNews)
 
 	req := httptest.NewRequest(http.MethodGet, "/news/filter?contains=AI", nil)
 	rr := httptest.NewRecorder()
@@ -140,10 +146,13 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 		},
 	}
 
-	api := New()
+	api, err := New("./config.json")
+	if err != nil {
+		t.Fatalf("failed to create API: %v", err)
+	}
 
-	gock.New(newsServiceURL).Reply(http.StatusOK).JSON(postSample)
-	gock.New(commentsServiceURL).Reply(http.StatusOK).JSON(commentsSample)
+	gock.New(api.Services["Aggregator"].URL).Reply(http.StatusOK).JSON(postSample)
+	gock.New(api.Services["Comments"].URL).Reply(http.StatusOK).JSON(commentsSample)
 
 	req := httptest.NewRequest(http.MethodGet, "/news/"+targetPostID.String(), nil)
 	rr := httptest.NewRecorder()
@@ -171,7 +180,10 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 func TestAPI_latestNewsProxy(t *testing.T) {
 	defer gock.Off()
 
-	api := New()
+	api, err := New("./config.json")
+	if err != nil {
+		t.Fatalf("failed to create API: %v", err)
+	}
 
 	responseSample := PostsResponse{
 		Posts: []models.Post{
@@ -206,7 +218,7 @@ func TestAPI_latestNewsProxy(t *testing.T) {
 		},
 	}
 
-	gock.New(newsServiceURL).Reply(http.StatusOK).JSON(responseSample)
+	gock.New(api.Services["Aggregator"].URL).Reply(http.StatusOK).JSON(responseSample)
 
 	req := httptest.NewRequest(http.MethodGet, "/news/latest?page=1&limit=3", nil)
 	rr := httptest.NewRecorder()
