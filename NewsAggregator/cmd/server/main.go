@@ -63,6 +63,10 @@ func main() {
 			Port:     os.Getenv("POSTGRES_PORT"),
 			DBName:   "news",
 		}
+		if !conf.IsValid() {
+			log.Fatal(fmt.Errorf("invalid postgres config: %+v", conf))
+		}
+
 		db, err := postgres.New(conf.ConString())
 		if err != nil {
 			log.Fatal(err)
