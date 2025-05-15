@@ -17,12 +17,28 @@ import (
 )
 
 func main() {
-	var httpAddr string
-	flag.StringVar(&httpAddr, "http", ":8088", "HTTP server address in the form 'host:port'.")
+	var (
+		httpAddr string
+		logLevel string
+	)
+
+	flag.StringVar(&httpAddr, "http", ":8077", "HTTP server address in the form 'host:port'.")
+	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
 	flag.Parse()
 
 	if !strings.Contains(httpAddr, ":") {
 		log.Warn("use ':' before port number, e.g. ':8080'")
+	}
+
+	switch logLevel {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
 	}
 
 	api, err := api.New("pkg/api/config.json")
