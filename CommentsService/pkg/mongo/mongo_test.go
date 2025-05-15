@@ -12,7 +12,9 @@ import (
 )
 
 func TestStorage_CreateComment(t *testing.T) {
-	db, err := StorageConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := StorageConnect(ctx)
 	if err != nil {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
@@ -23,8 +25,6 @@ func TestStorage_CreateComment(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		db.Close(ctx)
 	})
 
@@ -61,14 +61,16 @@ func TestStorage_CreateComment(t *testing.T) {
 		testReplyID:   testReply,
 	}
 
-	gotComment, err := db.CreateComment(testComment)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	gotComment, err := db.CreateComment(ctx, testComment)
 	if err != nil {
 		t.Errorf("unexpected error adding comment: %v", err)
 	}
 	if !reflect.DeepEqual(gotComment, testComment) {
 		t.Errorf("want comment\n%+v\n\ngot comment\n%+v\n", testComment, gotComment)
 	}
-	gotReply, err := db.CreateComment(testReply)
+	gotReply, err := db.CreateComment(ctx, testReply)
 	if err != nil {
 		t.Errorf("unexpected error adding reply: %v", err)
 	}
@@ -107,7 +109,10 @@ func TestStorage_CreateComment(t *testing.T) {
 // TODO: negative test cases for CreateComment().
 
 func TestStorage_Comments(t *testing.T) {
-	db, err := StorageConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := StorageConnect(ctx)
+	defer cancel()
 	if err != nil {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
@@ -118,8 +123,6 @@ func TestStorage_Comments(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		db.Close(ctx)
 	})
 
@@ -193,7 +196,7 @@ func TestStorage_Comments(t *testing.T) {
 		}
 	}
 
-	gotComments, err := db.Comments(postID)
+	gotComments, err := db.Comments(ctx, postID)
 	if err != nil {
 		t.Fatalf("unexpected error retrieving comments: %v", err)
 	}

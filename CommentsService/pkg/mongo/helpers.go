@@ -10,14 +10,14 @@ var MongoTestConf = &Config{
 
 // StorageConnect is a helper function that establishes a connection to the predefined test Mongo instance.
 // It returns a connected Storage object or an error if connection fails.
-func StorageConnect() (*Storage, error) {
+func StorageConnect(ctx context.Context) (*Storage, error) {
 	conf := MongoTestConf
-	db, err := New(conf)
+	db, err := New(ctx, conf)
 	if err != nil {
 		return nil, ErrConnectDB
 	}
 
-	err = db.Ping()
+	err = db.Ping(ctx)
 	if err != nil {
 		return nil, ErrDBNotResponding
 	}

@@ -19,7 +19,9 @@ import (
 )
 
 func TestAPI_createCommentHandler(t *testing.T) {
-	db, err := mongo.StorageConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := mongo.StorageConnect(ctx)
 	if err != nil {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
@@ -32,8 +34,6 @@ func TestAPI_createCommentHandler(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		db.Close(ctx)
 	})
 
@@ -88,7 +88,9 @@ func TestAPI_createCommentHandler(t *testing.T) {
 }
 
 func TestAPI_commentsHandler(t *testing.T) {
-	db, err := mongo.StorageConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := mongo.StorageConnect(ctx)
 	if err != nil {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
@@ -101,8 +103,6 @@ func TestAPI_commentsHandler(t *testing.T) {
 			t.Logf("WARNING: unable to restore DB state after the test: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
 		db.Close(ctx)
 	})
 
@@ -170,18 +170,15 @@ func TestAPI_commentsHandler(t *testing.T) {
 }
 
 func TestAPI_commentsHandlerNoComments(t *testing.T) {
-	db, err := mongo.StorageConnect()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	db, err := mongo.StorageConnect(ctx)
 	if err != nil {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
+	defer db.Close(ctx)
 
 	api := New(db)
-
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		db.Close(ctx)
-	})
 
 	targetPostID, err := uuid.NewV4()
 	if err != nil {

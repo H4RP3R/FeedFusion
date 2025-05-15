@@ -46,7 +46,7 @@ func (api *API) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	comment, err = api.db.CreateComment(comment)
+	comment, err = api.db.CreateComment(r.Context(), comment)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -69,7 +69,7 @@ func (api *API) commentsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	comments, err := api.db.Comments(postID)
+	comments, err := api.db.Comments(r.Context(), postID)
 	if err != nil {
 		if errors.Is(err, mongo.ErrCommentsNotFound) {
 			http.Error(w, "Comments not found", http.StatusNotFound)
