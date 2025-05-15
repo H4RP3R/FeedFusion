@@ -3,33 +3,42 @@ package main
 import (
 	"context"
 	"errors"
-	"gateway/pkg/api"
+	"flag"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"gateway/pkg/api"
 )
 
-const serverPort = ":8088"
-
 func main() {
+	var httpAddr string
+	flag.StringVar(&httpAddr, "http", ":8088", "HTTP server address in the form 'host:port'.")
+	flag.Parse()
+
+	if !strings.Contains(httpAddr, ":") {
+		log.Warn("use ':' before port number, e.g. ':8080'")
+	}
+
 	api, err := api.New("pkg/api/config.json")
 	if err != nil {
 		log.Fatalf("[server] failed to create API: %v", err)
 	}
 
 	srv := &http.Server{
-		Addr:    serverPort,
+		Addr:    httpAddr,
 		Handler: api.Router(),
 	}
 
 	go func() {
-		log.Infof("[server] starting on port %v", serverPort)
+		log.Infof("[server] starting on port %v", httpAddr)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Errorf("[server] failed to start: %v", err)
+			log.Fatalf("[server] failed to start: %v", err)
 			return
 		}
 	}()
