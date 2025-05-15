@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -42,6 +43,10 @@ func main() {
 	flag.StringVar(&httpAddr, "http", ":8066", "HTTP server address in the form 'host:port'.")
 	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
 	flag.Parse()
+
+	if !strings.Contains(httpAddr, ":") {
+		log.Warn("use ':' before port number, e.g. ':8080'")
+	}
 
 	switch logLevel {
 	case "debug":
