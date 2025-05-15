@@ -26,3 +26,11 @@ func (c Config) String() string {
 
 	return fmt.Sprintf("%#v", c)
 }
+
+func (c *Config) IsValid() bool {
+	// TODO: implement special validation for host and port.
+	if c.User == "" || c.Password == "" || c.Host == "" || c.Port == "" || c.DBName == "" {
+		return false
+	}
+	return true
+}
