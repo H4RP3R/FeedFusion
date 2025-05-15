@@ -38,7 +38,8 @@ type Storage interface {
 	// Post retrieves a post by its ID. It returns the post and an error if any occurs.
 	Post(id uuid.UUID) (post Post, err error)
 
-	// FilterPosts returns a list of posts whose titles contain the given substring.
+	// FilterPosts returns a list of posts whose titles contain the given substring,
+	// total page count and an error if any occurs.
 	FilterPosts(contains string, page, limit int) (posts []Post, numPages int, err error)
 }
 
