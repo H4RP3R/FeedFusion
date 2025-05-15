@@ -130,16 +130,7 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq.Header = r.Header.Clone()
-	// Remove hop-by-hop headers
-	proxyReq.Header.Del("Connection")
-	proxyReq.Header.Del("Keep-Alive")
-	proxyReq.Header.Del("Proxy-Authenticate")
-	proxyReq.Header.Del("Proxy-Authorization")
-	proxyReq.Header.Del("TE")
-	proxyReq.Header.Del("Trailer")
-	proxyReq.Header.Del("Transfer-Encoding")
-	proxyReq.Header.Del("Upgrade")
+	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(proxyReq)
@@ -264,16 +255,7 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyReq.Header = r.Header.Clone()
-	// Remove hop-by-hop headers
-	proxyReq.Header.Del("Connection")
-	proxyReq.Header.Del("Keep-Alive")
-	proxyReq.Header.Del("Proxy-Authenticate")
-	proxyReq.Header.Del("Proxy-Authorization")
-	proxyReq.Header.Del("TE")
-	proxyReq.Header.Del("Trailer")
-	proxyReq.Header.Del("Transfer-Encoding")
-	proxyReq.Header.Del("Upgrade")
+	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(proxyReq)
@@ -328,4 +310,24 @@ func fetchResource(client *http.Client, url, service string, resultObj any, resp
 	}
 
 	respChan <- resultObj
+}
+
+func cloneHeaderNoHop(header http.Header) http.Header {
+	hopByHopHeaders := []string{
+		"Connection",
+		"Keep-Alive",
+		"Proxy-Authenticate",
+		"Proxy-Authorization",
+		"TE",
+		"Trailer",
+		"Transfer-Encoding",
+		"Upgrade",
+	}
+
+	h := header.Clone()
+	for _, key := range hopByHopHeaders {
+		h.Del(key)
+	}
+
+	return h
 }
