@@ -18,6 +18,8 @@ import (
 	"comments/pkg/mongo"
 )
 
+const testRequestID = "9b4f6c5d-1a32-4d8f-b5a6-23c9e1f7d2a1"
+
 func TestAPI_createCommentHandler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -53,6 +55,7 @@ func TestAPI_createCommentHandler(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/comments", bytes.NewBuffer(b))
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 	api.Router().ServeHTTP(rr, req)
 	if rr.Code != http.StatusCreated {
@@ -123,6 +126,7 @@ func TestAPI_commentsHandler(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/comments", bytes.NewBuffer(b))
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 	api.r.ServeHTTP(rr, req)
 
@@ -141,6 +145,7 @@ func TestAPI_commentsHandler(t *testing.T) {
 
 	reqUrl := fmt.Sprintf("/comments?post_id=%s", targetPostID.String())
 	req = httptest.NewRequest(http.MethodGet, reqUrl, nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr = httptest.NewRecorder()
 	api.Router().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -186,6 +191,7 @@ func TestAPI_commentsHandlerNoComments(t *testing.T) {
 	}
 	reqUrl := fmt.Sprintf("/comments?post_id=%s", targetPostID.String())
 	req := httptest.NewRequest(http.MethodGet, reqUrl, nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 	api.Router().ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
