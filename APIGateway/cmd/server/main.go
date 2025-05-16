@@ -22,7 +22,7 @@ func main() {
 		logLevel string
 	)
 
-	flag.StringVar(&httpAddr, "http", ":8077", "HTTP server address in the form 'host:port'.")
+	flag.StringVar(&httpAddr, "http", ":8088", "HTTP server address in the form 'host:port'.")
 	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
 	flag.Parse()
 
