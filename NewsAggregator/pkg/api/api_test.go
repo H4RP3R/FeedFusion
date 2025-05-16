@@ -18,7 +18,10 @@ import (
 	"news/pkg/storage/memdb"
 )
 
-const testPostsPath = "../../test_data/post_examples.json"
+const (
+	testPostsPath = "../../test_data/post_examples.json"
+	testRequestID = "9b4f6c5d-1a32-4d8f-b5a6-23c9e1f7d2a1"
+)
 
 func TestMain(m *testing.M) {
 	log.SetLevel(log.PanicLevel)
@@ -44,6 +47,7 @@ func TestAPI_latestPostsHandler(t *testing.T) {
 	api := New(db)
 	path := fmt.Sprintf("/news/latest?page=1&limit=%d", len(testPosts))
 	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 
 	api.Router.ServeHTTP(rr, req)
@@ -76,6 +80,7 @@ func TestAPI_postDetailedHandlerLimitExceeded(t *testing.T) {
 	// Expect 400
 	path := fmt.Sprintf("/news/latest?page=1&limit=%d", maxPostsLimit+1)
 	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
@@ -89,6 +94,7 @@ func TestAPI_filterPostsHandler(t *testing.T) {
 
 	// Expect 200
 	req := httptest.NewRequest(http.MethodGet, "/news/filter?contains=some_text", nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -97,6 +103,7 @@ func TestAPI_filterPostsHandler(t *testing.T) {
 
 	// Expect 400
 	req = httptest.NewRequest(http.MethodGet, "/news/filter?contains=", nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr = httptest.NewRecorder()
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
@@ -106,6 +113,7 @@ func TestAPI_filterPostsHandler(t *testing.T) {
 	// Expect 400
 	path := fmt.Sprintf("/news/filter?contains=some_text&page=1&limit=%d", maxPostsLimit+1)
 	req = httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr = httptest.NewRecorder()
 	api.Router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
@@ -131,6 +139,7 @@ func TestAPI_postDetailedHandler(t *testing.T) {
 	targetPost := testPosts[0]
 	targetPostID := targetPost.ID
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/news/%s", targetPostID.String()), nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 
 	api.Router.ServeHTTP(rr, req)
@@ -164,6 +173,7 @@ func TestAPI_postDetailedHandlerNotExist(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/news/%s", targetPostID.String()), nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 
 	api.Router.ServeHTTP(rr, req)
@@ -177,6 +187,7 @@ func TestAPI_postDetailedHandlerInvalidUUID(t *testing.T) {
 	api := New(db)
 
 	req := httptest.NewRequest(http.MethodGet, "/news/invalid-uuid", nil)
+	req.Header.Set("X-Request-Id", testRequestID)
 	rr := httptest.NewRecorder()
 
 	api.Router.ServeHTTP(rr, req)
