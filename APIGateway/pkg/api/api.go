@@ -56,22 +56,29 @@ func New(confPath string) (*API, error) {
 }
 
 func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
-	page, limit := parsePagination(r, 100)
+	reqID := GetRequestID(r.Context())
+	sID := shorten(reqID)
 
+	page, limit := parsePagination(r, 100)
 	targetURL := fmt.Sprintf("%s/news/latest?page=%d&limit=%d", api.Services["Aggregator"].URL, page, limit)
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
-		log.Errorf("[latestNewsProxy][from:%v] error creating proxy request %s %s: %v", r.RemoteAddr, r.Method, targetURL, err)
+		log.Errorf("[latestNewsProxy][%s] error creating proxy request %s %s: %v", sID, r.Method, targetURL, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	proxyReq.Header = cloneHeaderNoHop(r.Header)
+	if reqID != "" {
+		proxyReq.Header.Set("X-Request-Id", reqID)
 	}
 
 	client := &http.Client{Timeout: httpClientTimeout}
 
 	resp, err := client.Do(proxyReq)
 	if err != nil {
-		log.Errorf("[latestNewsProxy][from:%v] error proxying request %s %s: %v", r.RemoteAddr, r.Method, targetURL, err)
+		log.Errorf("[latestNewsProxy][%s] error proxying request %s %s: %v", sID, r.Method, targetURL, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -79,21 +86,26 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {
-			w.Header().Add(k, v)
+			w.Header().Set(k, v)
 		}
 	}
 
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Errorf("[latestNewsProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
+		log.Errorf("[latestNewsProxy][%s] error copying response body: %v", sID, err)
 	}
+
+	log.Debugf("[latestNewsProxy][%s] response sent to %v", sID, r.RemoteAddr)
 }
 
 func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
+	reqID := GetRequestID(r.Context())
+	sID := shorten(reqID)
+
 	contains := r.URL.Query().Get("contains")
 	if contains == "" {
-		log.Debugf("[filterNewsProxy][from:%v] empty contains parameter", r.RemoteAddr)
+		log.Debugf("[filterNewsProxy][%s] empty contains parameter", sID)
 		http.Error(w, "Empty contains parameter", http.StatusBadRequest)
 		return
 	}
@@ -108,17 +120,20 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, nil)
 	if err != nil {
-		log.Errorf("[filterNewsProxy][from:%v] error creating proxy request: %v", r.RemoteAddr, err)
+		log.Errorf("[filterNewsProxy][%s] error creating proxy request: %v", sID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	proxyReq.Header = cloneHeaderNoHop(r.Header)
+	if reqID != "" {
+		proxyReq.Header.Set("X-Request-Id", reqID)
+	}
 
 	client := &http.Client{Timeout: httpClientTimeout}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
-		log.Errorf("[filterNewsProxy][from:%v] error calling news aggregator: %v", r.RemoteAddr, err)
+		log.Errorf("[filterNewsProxy][%s] error calling news aggregator: %v", sID, err)
 		http.Error(w, "News Aggregator Unavailable", http.StatusBadGateway)
 		return
 	}
@@ -126,21 +141,26 @@ func (api *API) filterNewsProxy(w http.ResponseWriter, r *http.Request) {
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {
-			w.Header().Add(k, v)
+			w.Header().Set(k, v)
 		}
 	}
 
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Errorf("[filterNewsProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
+		log.Errorf("[filterNewsProxy][%s] error copying response body: %v", sID, err)
 	}
+
+	log.Debugf("[filterNewsProxy][%s] response sent to %v", sID, r.RemoteAddr)
 }
 
 func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
+	reqID := GetRequestID(r.Context())
+	sID := shorten(reqID)
+
 	idStr, ok := mux.Vars(r)["id"]
 	if !ok {
-		log.Debugf("[newsDetailedProxy][from:%v] missing id parameter", r.RemoteAddr)
+		log.Debugf("[newsDetailedProxy][%s] missing id parameter", sID)
 		http.Error(w, "Missing id parameter", http.StatusBadRequest)
 		return
 	}
@@ -160,7 +180,7 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 		values := url.Query()
 		values.Set("post_id", idStr)
 		url.RawQuery = values.Encode()
-		fetchResource(client, url.String(), "comments service", &[]models.Comment{}, respChan)
+		fetchResource(r.Context(), client, reqID, url.String(), "comments service", &[]models.Comment{}, respChan)
 
 	}(wg, client)
 
@@ -170,7 +190,7 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 
 		url, _ := url.Parse(api.Services["Aggregator"].URL)
 		url = url.JoinPath(url.Path, "news", idStr)
-		fetchResource(client, url.String(), "news aggregator", &models.Post{}, respChan)
+		fetchResource(r.Context(), client, reqID, url.String(), "news aggregator", &models.Post{}, respChan)
 	}(wg, client)
 
 	wg.Wait()
@@ -190,12 +210,12 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 			if errors.As(v, &errSubRequest) {
 				if v.Error() == "news aggregator sub request returned 404" {
 					http.Error(w, "Post not found", http.StatusNotFound)
-					log.Debugf("[newsDetailedProxy][from:%v] %v", r.RemoteAddr, errSubRequest)
+					log.Debugf("[newsDetailedProxy][%s] %v", sID, errSubRequest)
 					return
 				} else if v.Error() == "comments service sub request returned 404" {
-					log.Debugf("[newsDetailedProxy][from:%v] %v", r.RemoteAddr, errSubRequest)
+					log.Debugf("[newsDetailedProxy][%s] %v", sID, errSubRequest)
 				} else {
-					log.Errorf("[newsDetailedProxy][from:%v] error in sub request: %v", r.RemoteAddr, errSubRequest)
+					log.Errorf("[newsDetailedProxy][%s] error in sub request: %v", sID, errSubRequest)
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 					return
 				}
@@ -206,16 +226,21 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 	post.Comments = comments
 
 	if err := json.NewEncoder(w).Encode(post); err != nil {
-		log.Errorf("[newsDetailedProxy][from:%v] error encoding response: %v", r.RemoteAddr, err)
+		log.Errorf("[newsDetailedProxy][%s] error encoding response: %v", sID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
+	log.Debugf("[newsDetailedProxy][%s] response sent to %v", sID, r.RemoteAddr)
 }
 
 func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
+	reqID := GetRequestID(r.Context())
+	sID := shorten(reqID)
+
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("[createCommentProxy][from:%v] error reading request body: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][%s] error reading request body: %v", sID, err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -224,12 +249,12 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 	// Cut off invalid requests
 	var comment models.Comment
 	if err := json.Unmarshal(b, &comment); err != nil {
-		log.Errorf("[createCommentProxy][from:%v] invalid JSON: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][%s] invalid JSON: %v", sID, err)
 		http.Error(w, "Bad Request: invalid JSON", http.StatusBadRequest)
 		return
 	}
 	if comment.PostID == uuid.Nil && comment.ParentID == uuid.Nil {
-		log.Errorf("[createCommentProxy][from:%v] missing post_id and parent_id", r.RemoteAddr)
+		log.Errorf("[createCommentProxy][%s] missing post_id and parent_id", sID)
 		http.Error(w, "Bad Request: missing post_id or parent_id", http.StatusBadRequest)
 		return
 	}
@@ -238,17 +263,20 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxyReq, err := http.NewRequest(r.Method, targetURL, bytes.NewReader(b))
 	if err != nil {
-		log.Errorf("[createCommentProxy][from:%v] error creating proxy request: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][%s] error creating proxy request: %v", sID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	proxyReq.Header = cloneHeaderNoHop(r.Header)
+	if reqID != "" {
+		proxyReq.Header.Set("X-Request-Id", reqID)
+	}
 
 	client := &http.Client{Timeout: httpClientTimeout}
 	resp, err := client.Do(proxyReq)
 	if err != nil {
-		log.Errorf("[createCommentProxy][from:%v] error calling comments service: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][%s] error calling comments service: %v", sID, err)
 		http.Error(w, "Comments Service Unavailable", http.StatusBadGateway)
 		return
 	}
@@ -257,22 +285,28 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 	// Copy response headers
 	for k, vv := range resp.Header {
 		for _, v := range vv {
-			w.Header().Add(k, v)
+			w.Header().Set(k, v)
 		}
 	}
 
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Errorf("[createCommentProxy][from:%v] error copying response body: %v", r.RemoteAddr, err)
+		log.Errorf("[createCommentProxy][%s] error copying response body: %v", sID, err)
 	}
+
+	log.Debugf("[createCommentProxy][%s] response sent to %v", sID, r.RemoteAddr)
 }
 
-func fetchResource(client *http.Client, url, service string, resultObj any, respChan chan any) {
-	proxyReq, err := http.NewRequest(http.MethodGet, url, nil)
+func fetchResource(ctx context.Context, client *http.Client, reqID, url, service string, resultObj any, respChan chan any) {
+	proxyReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		respChan <- fmt.Errorf("error creating request to comments service: %w", err)
+		respChan <- fmt.Errorf("error creating request to %s: %w", service, err)
 		return
+	}
+
+	if reqID != "" {
+		proxyReq.Header.Set("X-Request-Id", reqID)
 	}
 
 	resp, err := client.Do(proxyReq)
@@ -355,4 +389,13 @@ func GetRequestID(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// shorten truncates a string to 6 characters if it is longer than 6, appends '...' at the end,
+// otherwise it returns the string unchanged.
+func shorten(s string) string {
+	if len(s) > 6 {
+		return s[:6] + "..."
+	}
+	return s
 }
