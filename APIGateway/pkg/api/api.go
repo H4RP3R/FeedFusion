@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ func (api *API) Router() *mux.Router {
 }
 
 func (api *API) endpoints() {
+	api.r.Use(api.requestIDMiddleware)
 	api.r.Use(api.headerMiddleware)
 
 	api.r.HandleFunc("/news/latest", api.latestNewsProxy).Methods(http.MethodGet)
@@ -64,8 +66,6 @@ func (api *API) latestNewsProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-
-	proxyReq.Header = cloneHeaderNoHop(r.Header)
 
 	client := &http.Client{Timeout: httpClientTimeout}
 
@@ -186,15 +186,20 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 		case *models.Post:
 			post = *v
 		case error:
-			var errNotFound *ErrNotFound
-			if errors.As(v, &errNotFound) {
-				http.Error(w, "Post not found", http.StatusNotFound)
-				log.Infof("[newsDetailedProxy][from:%v] %v", r.RemoteAddr, errNotFound)
-				return
+			var errSubRequest *ErrSubRequest
+			if errors.As(v, &errSubRequest) {
+				if v.Error() == "news aggregator sub request returned 404" {
+					http.Error(w, "Post not found", http.StatusNotFound)
+					log.Debugf("[newsDetailedProxy][from:%v] %v", r.RemoteAddr, errSubRequest)
+					return
+				} else if v.Error() == "comments service sub request returned 404" {
+					log.Debugf("[newsDetailedProxy][from:%v] %v", r.RemoteAddr, errSubRequest)
+				} else {
+					log.Errorf("[newsDetailedProxy][from:%v] error in sub request: %v", r.RemoteAddr, errSubRequest)
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					return
+				}
 			}
-			log.Errorf("[newsDetailedProxy][from:%v] error in sub request: %v", r.RemoteAddr, msg)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
 		}
 	}
 
@@ -278,7 +283,7 @@ func fetchResource(client *http.Client, url, service string, resultObj any, resp
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		respChan <- &ErrNotFound{msg: service + " sub request returned 404"}
+		respChan <- &ErrSubRequest{msg: service + " sub request returned 404"}
 		return
 	}
 
@@ -341,4 +346,13 @@ func parsePagination(r *http.Request, maxLimit int) (page, limit int) {
 	}
 
 	return
+}
+
+// GetRequestID extracts the request ID from the context.
+// It returns the request ID as a string if present, otherwise returns an empty string.
+func GetRequestID(ctx context.Context) string {
+	if v, ok := ctx.Value(RequestIDKey).(string); ok {
+		return v
+	}
+	return ""
 }

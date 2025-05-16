@@ -1,9 +1,9 @@
 package api
 
-type ErrNotFound struct {
+type ErrSubRequest struct {
 	msg string
 }
 
-func (e *ErrNotFound) Error() string {
+func (e *ErrSubRequest) Error() string {
 	return e.msg
 }
