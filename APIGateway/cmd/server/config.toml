@@ -1,0 +1,13 @@
+httpAddr = ":8088"
+logLevel = "info"
+kafkaAddr = "localhost:9092"
+kafkaTopic = "feed-fusion-logs"
+kafkaBatch = 0
+
+[services.Aggregator]
+url = "http://localhost:8066"
+name = "Aggregator"
+
+[services.Comments]
+url = "http://localhost:8077"
+name = "Comments"
