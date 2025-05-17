@@ -16,10 +16,19 @@ import (
 	"gateway/pkg/models"
 )
 
+var mockServices = map[string]Service{
+	"Aggregator": {
+		URL: "http://localhost:8080",
+	},
+	"Comments": {
+		URL: "http://localhost:8081",
+	},
+}
+
 func TestAPI_createCommentProxy(t *testing.T) {
 	defer gock.Off()
 
-	api, err := New("./config.json")
+	api, err := New(mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -96,7 +105,7 @@ func TestAPI_filterNewsProxy(t *testing.T) {
 		},
 	}
 
-	api, err := New("./config.json")
+	api, err := New(mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -146,7 +155,7 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 		},
 	}
 
-	api, err := New("./config.json")
+	api, err := New(mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -180,7 +189,7 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 func TestAPI_latestNewsProxy(t *testing.T) {
 	defer gock.Off()
 
-	api, err := New("./config.json")
+	api, err := New(mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}

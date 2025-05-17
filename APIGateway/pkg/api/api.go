@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
+	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
 	"gateway/pkg/models"
@@ -22,9 +23,16 @@ import (
 
 const httpClientTimeout = 5 * time.Second
 
+type Service struct {
+	URL  string
+	Name string
+}
+
 type API struct {
-	r *mux.Router
-	*Config
+	r  *mux.Router
+	kw *kafka.Writer
+
+	Services map[string]Service
 }
 
 func (api *API) Router() *mux.Router {
@@ -42,15 +50,17 @@ func (api *API) endpoints() {
 	api.r.HandleFunc("/comments", api.createCommentProxy).Methods(http.MethodPost)
 }
 
-func New(confPath string) (*API, error) {
-	api := API{r: mux.NewRouter()}
-	api.endpoints()
-
-	var err error
-	api.Config, err = loadConfig(confPath)
-	if err != nil {
-		return nil, err
+func New(services map[string]Service, kafkaWriter *kafka.Writer) (*API, error) {
+	api := API{
+		r:        mux.NewRouter(),
+		kw:       kafkaWriter,
+		Services: services,
 	}
+
+	if api.kw != nil {
+		api.r.Use(api.loggingMiddleware(api.kw))
+	}
+	api.endpoints()
 
 	return &api, nil
 }
