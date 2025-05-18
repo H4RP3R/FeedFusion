@@ -3,6 +3,7 @@ module logkeeper
 go 1.23.3
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	github.com/elastic/go-elasticsearch/v8 v8.18.0
 	github.com/segmentio/kafka-go v0.4.48
 	github.com/sirupsen/logrus v1.9.3
