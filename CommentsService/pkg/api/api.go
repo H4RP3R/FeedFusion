@@ -42,7 +42,7 @@ func (api *API) endpoints() {
 }
 
 func New(name string, db *mongo.Storage, kw *kafka.Writer) *API {
-	api := API{ServiceName: name, r: mux.NewRouter(), db: db}
+	api := API{ServiceName: name, r: mux.NewRouter(), db: db, kw: kw}
 	api.endpoints()
 
 	return &api
@@ -68,6 +68,8 @@ func (api *API) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusCreated)
+
 	err = json.NewEncoder(w).Encode(comment)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -75,7 +77,6 @@ func (api *API) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
 	log.Debugf("[createCommentHandler][%s] comment created", sID)
 }
 
@@ -115,7 +116,6 @@ func (api *API) commentsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	log.Debugf("[commentsHandler][%s] comments retrieved", sID)
 }
 

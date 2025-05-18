@@ -8,7 +8,7 @@ type ResponseLogger struct {
 }
 
 func New(w http.ResponseWriter) *ResponseLogger {
-	return &ResponseLogger{w: w}
+	return &ResponseLogger{w, http.StatusOK}
 }
 
 func (l *ResponseLogger) WriteHeader(code int) {

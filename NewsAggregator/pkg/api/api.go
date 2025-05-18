@@ -87,7 +87,6 @@ func (api *API) latestPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	log.Debugf("[latestPostsHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 
@@ -133,7 +132,6 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	log.Debugf("[filterPostsHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 
@@ -168,7 +166,6 @@ func (api *API) postDetailedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	log.Debugf("[postDetailedHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 

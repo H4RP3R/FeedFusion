@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -147,6 +148,7 @@ func createTopic(broker, topic string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("ASDs")
 	defer conn.Close()
 
 	return conn.CreateTopics(kafka.TopicConfig{
