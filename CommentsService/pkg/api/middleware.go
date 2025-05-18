@@ -43,28 +43,32 @@ func (api *API) loggingMiddleware(kWriter *kafka.Writer) func(http.Handler) http
 			start := time.Now()
 			lw := logger.New(w)
 			defer func() {
-				entry := LogEntry{
-					Timestamp:  time.Now(),
-					IP:         getClientIP(r),
-					StatusCode: lw.Status(),
-					RequestID:  GetRequestID(r.Context()),
-					Method:     r.Method,
-					Path:       r.URL.Path,
-					Duration:   time.Since(start).Seconds(),
-					Service:    api.ServiceName,
-				}
+				go func() {
+					entry := LogEntry{
+						Timestamp:  time.Now(),
+						IP:         getClientIP(r),
+						StatusCode: lw.Status(),
+						RequestID:  GetRequestID(r.Context()),
+						Method:     r.Method,
+						Path:       r.URL.Path,
+						Duration:   time.Since(start).Seconds(),
+						Service:    api.ServiceName,
+					}
 
-				jsonEntry, err := json.Marshal(entry)
-				if err != nil {
-					log.Errorf("[LoggingMiddleware] failed to marshal log entry for request %s", entry.RequestID)
-					return
-				}
-				err = kWriter.WriteMessages(r.Context(), kafka.Message{Value: jsonEntry})
-				if err != nil {
-					log.Errorf("[LoggingMiddleware] failed to write log to Kafka: %v", err)
-					return
-				}
-				log.Debugf("[LoggingMiddleware] log entry sent to Kafka request_id:%s", entry.RequestID)
+					jsonEntry, err := json.Marshal(entry)
+					if err != nil {
+						log.Errorf("[LoggingMiddleware] failed to marshal log entry for request %s", entry.RequestID)
+						return
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					err = kWriter.WriteMessages(ctx, kafka.Message{Value: jsonEntry})
+					if err != nil {
+						log.Errorf("[LoggingMiddleware] failed to write log to Kafka: %v", err)
+						return
+					}
+					log.Debugf("[LoggingMiddleware] log entry sent to Kafka request_id:%s", entry.RequestID)
+				}()
 			}()
 
 			next.ServeHTTP(lw, r)
