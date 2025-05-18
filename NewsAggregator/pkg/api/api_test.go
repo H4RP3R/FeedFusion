@@ -44,7 +44,7 @@ func TestAPI_latestPostsHandler(t *testing.T) {
 		t.Fatalf("unexpected error while adding posts: %v", err)
 	}
 
-	api := New(db)
+	api := New("", db, nil)
 	path := fmt.Sprintf("/news/latest?page=1&limit=%d", len(testPosts))
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("X-Request-Id", testRequestID)
@@ -75,7 +75,7 @@ func TestAPI_latestPostsHandler(t *testing.T) {
 
 func TestAPI_postDetailedHandlerLimitExceeded(t *testing.T) {
 	db := memdb.New()
-	api := New(db)
+	api := New("", db, nil)
 
 	// Expect 400
 	path := fmt.Sprintf("/news/latest?page=1&limit=%d", maxPostsLimit+1)
@@ -90,7 +90,7 @@ func TestAPI_postDetailedHandlerLimitExceeded(t *testing.T) {
 
 func TestAPI_filterPostsHandler(t *testing.T) {
 	db := memdb.New()
-	api := New(db)
+	api := New("", db, nil)
 
 	// Expect 200
 	req := httptest.NewRequest(http.MethodGet, "/news/filter?contains=some_text", nil)
@@ -135,7 +135,7 @@ func TestAPI_postDetailedHandler(t *testing.T) {
 		t.Fatalf("unexpected error while adding posts: %v", err)
 	}
 
-	api := New(db)
+	api := New("", db, nil)
 	targetPost := testPosts[0]
 	targetPostID := targetPost.ID
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/news/%s", targetPostID.String()), nil)
@@ -165,7 +165,7 @@ func TestAPI_postDetailedHandler(t *testing.T) {
 
 func TestAPI_postDetailedHandlerNotExist(t *testing.T) {
 	db := memdb.New()
-	api := New(db)
+	api := New("", db, nil)
 
 	targetPostID, err := uuid.FromString("01234567-89ab-cdef-0123-456789abcdef")
 	if err != nil {
@@ -184,7 +184,7 @@ func TestAPI_postDetailedHandlerNotExist(t *testing.T) {
 
 func TestAPI_postDetailedHandlerInvalidUUID(t *testing.T) {
 	db := memdb.New()
-	api := New(db)
+	api := New("", db, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/news/invalid-uuid", nil)
 	req.Header.Set("X-Request-Id", testRequestID)

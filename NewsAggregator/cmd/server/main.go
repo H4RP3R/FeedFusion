@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
 	"news/pkg/api"
@@ -22,14 +24,26 @@ import (
 	"news/pkg/storage/postgres"
 )
 
-func main() {
-	log.SetLevel(log.DebugLevel)
+type Config struct {
+	ServiceName string `toml:"serviceName"`
+	HTTPAddr    string `toml:"httpAddr"`
+	LogLevel    string `toml:"logLevel"`
+	KafkaAddr   string `toml:"kafkaAddr"`
+	KafkaTopic  string `toml:"kafkaTopic"`
+	KafkaBatch  int    `toml:"kafkaBatch"`
+}
 
+func main() {
 	var (
-		sdb      storage.Storage
-		dev      bool
-		httpAddr string
-		logLevel string
+		sdb storage.Storage
+		dev bool
+
+		configPath string
+		httpAddr   string
+		logLevel   string
+		kafkaAddr  string
+		kafkaTopic string
+		kafkaBatch int
 	)
 
 	var (
@@ -39,13 +53,38 @@ func main() {
 	)
 
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	flag.StringVar(&configPath, "config", "cmd/server/config.toml", "Path to TOML config file")
 	flag.BoolVar(&dev, "dev", false, "Run the server in development mode with in-memory DB.")
 	flag.StringVar(&httpAddr, "http", ":8066", "HTTP server address in the form 'host:port'.")
 	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
+	flag.StringVar(&kafkaAddr, "kafka", "", "Kafka server address in the form 'host:port'.")
+	flag.StringVar(&kafkaTopic, "topic", "", "Kafka topic.")
+	flag.IntVar(&kafkaBatch, "batch", 0, "Kafka batch size.")
 	flag.Parse()
 
+	var cfg Config
+	if _, err := toml.DecodeFile(configPath, &cfg); err != nil {
+		log.Fatalf("[server] failed to load config file %s: %v", configPath, err)
+	}
+	// Override config with flags if set
+	if httpAddr != "" {
+		cfg.HTTPAddr = httpAddr
+	}
+	if logLevel != "" {
+		cfg.LogLevel = logLevel
+	}
+	if kafkaAddr != "" {
+		cfg.KafkaAddr = kafkaAddr
+	}
+	if kafkaTopic != "" {
+		cfg.KafkaTopic = kafkaTopic
+	}
+	if kafkaBatch != 0 {
+		cfg.KafkaBatch = kafkaBatch
+	}
+
 	if !strings.Contains(httpAddr, ":") {
-		log.Warn("use ':' before port number, e.g. ':8080'")
+		log.Warn("[server] use ':' before port number, e.g. ':8080'")
 	}
 
 	switch logLevel {
@@ -69,7 +108,7 @@ func main() {
 			DBName:   "news",
 		}
 		if !conf.IsValid() {
-			log.Fatal(fmt.Errorf("invalid postgres config: %+v", conf))
+			log.Fatal(fmt.Errorf("[server] invalid postgres config: %+v", conf))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -84,20 +123,35 @@ func main() {
 		if err != nil {
 			log.Fatal(fmt.Errorf("%w: %v", storage.ErrDBNotResponding, err))
 		}
-		log.Infof("connected to postgres: %s", conf)
+		log.Infof("[server] connected to postgres: %s", conf)
 		sdb = db
 
 	case true:
-		log.Info("Run server with in memory DB")
+		log.Info("[server] running with in memory DB")
 		sdb = memdb.New()
 	}
 
 	conf, err := rss.LoadConf("cmd/server/config.json")
 	if err != nil {
-		log.Fatalf("unable to load RSS parser config: %v", err)
+		log.Fatalf("[server] unable to load RSS parser config: %v", err)
 	}
 
-	api := api.New(sdb)
+	var kafkaWriter *kafka.Writer
+	if cfg.KafkaAddr != "" && cfg.KafkaTopic != "" {
+		kafkaWriter = &kafka.Writer{
+			Addr:      kafka.TCP(cfg.KafkaAddr),
+			Topic:     cfg.KafkaTopic,
+			BatchSize: cfg.KafkaBatch,
+		}
+		err := createTopic(kafkaWriter.Addr.String(), kafkaWriter.Topic)
+		if err != nil {
+			log.Warnf("[server] failed to create Kafka topic: %v", err)
+		}
+	} else {
+		log.Warnf("[server] kafka was not configured, logs will not be sent to Kafka")
+	}
+
+	api := api.New(cfg.ServiceName, sdb, kafkaWriter)
 	parser := rss.NewParser(*conf)
 
 	var wg sync.WaitGroup
@@ -105,7 +159,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer func() {
-			log.Infof("Message receiver stopped")
+			log.Infof("[server] message receiver stopped")
 			wg.Done()
 		}()
 
@@ -114,13 +168,13 @@ func main() {
 
 		for msg := range msgChan {
 			if msg.Err != nil {
-				log.Warnf("Error while parsing %s: %v", msg.Source, msg.Err)
+				log.Warnf("[server] error while parsing %s: %v", msg.Source, msg.Err)
 			} else {
 				err := api.DB.AddPosts(ctx, storage.ValidatePosts(msg.Data...))
 				if err != nil {
-					log.Warnf("Error while adding posts from %s to DB: %v", msg.Source, err)
+					log.Warnf("[server] error while adding posts from %s to DB: %v", msg.Source, err)
 				} else {
-					log.Infof("DB updated with posts from %s", msg.Source)
+					log.Infof("[server] DB updated with posts from %s", msg.Source)
 				}
 			}
 		}
@@ -133,7 +187,7 @@ func main() {
 		defer func() {
 			close(msgChan)
 			ticker.Stop()
-			log.Info("Parser stopped")
+			log.Info("[server] parser stopped")
 			wg.Done()
 		}()
 
@@ -155,9 +209,9 @@ func main() {
 
 	go func() {
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("HTTP server error: %v", err)
+			log.Fatalf("[server] HTTP server error: %v", err)
 		}
-		log.Info("Stopped serving new connections")
+		log.Info("[server] stopped serving new connections")
 	}()
 
 	<-sigChan
@@ -168,7 +222,21 @@ func main() {
 	defer shutdownRelease()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("HTTP shutdown error: %v", err)
+		log.Fatalf("[server] HTTP shutdown error: %v", err)
 	}
-	log.Info("Server stopped")
+	log.Info("[server] stopped")
+}
+
+func createTopic(broker, topic string) error {
+	conn, err := kafka.DialContext(context.Background(), "tcp", broker)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	return conn.CreateTopics(kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	})
 }

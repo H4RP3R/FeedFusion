@@ -10,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
+	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
 	"news/pkg/storage"
@@ -18,14 +19,18 @@ import (
 const maxPostsLimit = 100
 
 type API struct {
-	DB     storage.Storage
-	Router *mux.Router
+	ServiceName string
+	DB          storage.Storage
+	Router      *mux.Router
+	kw          *kafka.Writer
 }
 
-func New(db storage.Storage) *API {
+func New(name string, db storage.Storage, kafkaWriter *kafka.Writer) *API {
 	api := API{
-		DB:     db,
-		Router: mux.NewRouter(),
+		ServiceName: name,
+		DB:          db,
+		Router:      mux.NewRouter(),
+		kw:          kafkaWriter,
 	}
 	api.endpoints()
 
@@ -35,6 +40,10 @@ func New(db storage.Storage) *API {
 func (api *API) endpoints() {
 	api.Router.Use(api.requestIDMiddleware)
 	api.Router.Use(api.headerMiddleware)
+
+	if api.kw != nil {
+		api.Router.Use(api.loggingMiddleware(api.kw))
+	}
 
 	api.Router.HandleFunc("/news/filter", api.filterPostsHandler).Methods(http.MethodGet)
 	api.Router.HandleFunc("/news/latest", api.latestPostsHandler).Methods(http.MethodGet)
@@ -78,6 +87,7 @@ func (api *API) latestPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	log.Debugf("[latestPostsHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 
@@ -123,6 +133,7 @@ func (api *API) filterPostsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	log.Debugf("[filterPostsHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 
@@ -157,6 +168,7 @@ func (api *API) postDetailedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	log.Debugf("[postDetailedHandler][%s] response sent to: %v", sID, r.RemoteAddr)
 }
 
