@@ -69,6 +69,17 @@ func main() {
 		cfg.LogLevel = logLevel
 	}
 
+	switch logLevel {
+	case "debug":
+		log.SetLevel(log.DebugLevel)
+	case "info":
+		log.SetLevel(log.InfoLevel)
+	case "warn":
+		log.SetLevel(log.WarnLevel)
+	case "error":
+		log.SetLevel(log.ErrorLevel)
+	}
+
 	es, err := elasticsearch.NewClient(elasticsearch.Config{Addresses: cfg.ElasticSearchNodes})
 	if err != nil {
 		log.Fatalf("[logkeeper] error creating the client: %s", err)
