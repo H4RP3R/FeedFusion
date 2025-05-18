@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
+	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
 	"comments/pkg/models"
@@ -15,8 +16,11 @@ import (
 )
 
 type API struct {
+	ServiceName string
+
 	r  *mux.Router
 	db *mongo.Storage
+	kw *kafka.Writer
 }
 
 func (api *API) Router() *mux.Router {
@@ -27,14 +31,18 @@ func (api *API) endpoints() {
 	api.r.Use(api.requestIDMiddleware)
 	api.r.Use(api.headerMiddleware)
 
+	if api.kw != nil {
+		api.r.Use(api.loggingMiddleware(api.kw))
+	}
+
 	api.r.HandleFunc("/comments", api.createCommentHandler).Methods(http.MethodPost)
 	api.r.HandleFunc("/comments", api.commentsHandler).
 		Queries("post_id", "{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}}").
 		Methods(http.MethodGet)
 }
 
-func New(db *mongo.Storage) *API {
-	api := API{r: mux.NewRouter(), db: db}
+func New(name string, db *mongo.Storage, kw *kafka.Writer) *API {
+	api := API{ServiceName: name, r: mux.NewRouter(), db: db}
 	api.endpoints()
 
 	return &api
@@ -60,9 +68,14 @@ func (api *API) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(comment)
+	err = json.NewEncoder(w).Encode(comment)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Errorf("[createCommentHandler][%s] failed to encode comment: %v", sID, err)
+		return
+	}
 
+	w.WriteHeader(http.StatusCreated)
 	log.Debugf("[createCommentHandler][%s] comment created", sID)
 }
 
@@ -102,6 +115,7 @@ func (api *API) commentsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	log.Debugf("[commentsHandler][%s] comments retrieved", sID)
 }
 

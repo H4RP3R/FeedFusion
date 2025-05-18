@@ -28,7 +28,7 @@ func TestAPI_createCommentHandler(t *testing.T) {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
 
-	api := New(db)
+	api := New("", db, nil)
 
 	t.Cleanup(func() {
 		err := mongo.RestoreDB(db)
@@ -98,7 +98,7 @@ func TestAPI_commentsHandler(t *testing.T) {
 		t.Fatalf("failed to connect to DB: %v", err)
 	}
 
-	api := New(db)
+	api := New("", db, nil)
 
 	t.Cleanup(func() {
 		err := mongo.RestoreDB(db)
@@ -183,7 +183,7 @@ func TestAPI_commentsHandlerNoComments(t *testing.T) {
 	}
 	defer db.Close(ctx)
 
-	api := New(db)
+	api := New("", db, nil)
 
 	targetPostID, err := uuid.NewV4()
 	if err != nil {
