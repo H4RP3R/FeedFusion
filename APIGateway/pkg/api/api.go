@@ -243,6 +243,7 @@ func (api *API) newsDetailedProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	log.Debugf("[newsDetailedProxy][%s] response sent to %v", sID, r.RemoteAddr)
 }
 
