@@ -57,10 +57,10 @@ func New(services map[string]Service, kafkaWriter *kafka.Writer) (*API, error) {
 		Services: services,
 	}
 
+	api.endpoints()
 	if api.kw != nil {
 		api.r.Use(api.loggingMiddleware(api.kw))
 	}
-	api.endpoints()
 
 	return &api, nil
 }
