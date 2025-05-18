@@ -29,10 +29,11 @@ type Service struct {
 }
 
 type API struct {
+	ServiceName string
+	Services    map[string]Service
+
 	r  *mux.Router
 	kw *kafka.Writer
-
-	Services map[string]Service
 }
 
 func (api *API) Router() *mux.Router {
@@ -43,6 +44,10 @@ func (api *API) endpoints() {
 	api.r.Use(api.requestIDMiddleware)
 	api.r.Use(api.headerMiddleware)
 
+	if api.kw != nil {
+		api.r.Use(api.loggingMiddleware(api.kw))
+	}
+
 	api.r.HandleFunc("/news/latest", api.latestNewsProxy).Methods(http.MethodGet)
 	api.r.HandleFunc("/news/filter", api.filterNewsProxy).Methods(http.MethodGet)
 	api.r.HandleFunc("/news/{id:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$}", api.newsDetailedProxy).Methods(http.MethodGet)
@@ -50,17 +55,14 @@ func (api *API) endpoints() {
 	api.r.HandleFunc("/comments", api.createCommentProxy).Methods(http.MethodPost)
 }
 
-func New(services map[string]Service, kafkaWriter *kafka.Writer) (*API, error) {
+func New(name string, services map[string]Service, kafkaWriter *kafka.Writer) (*API, error) {
 	api := API{
-		r:        mux.NewRouter(),
-		kw:       kafkaWriter,
-		Services: services,
+		ServiceName: name,
+		Services:    services,
+		r:           mux.NewRouter(),
+		kw:          kafkaWriter,
 	}
-
 	api.endpoints()
-	if api.kw != nil {
-		api.r.Use(api.loggingMiddleware(api.kw))
-	}
 
 	return &api, nil
 }

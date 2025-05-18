@@ -25,4 +25,5 @@ type LogEntry struct {
 	Method     string    `json:"method"`
 	Path       string    `json:"path"`
 	Duration   float64   `json:"duration_sec"`
+	Service    string    `json:"service"`
 }

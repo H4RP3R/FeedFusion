@@ -19,7 +19,8 @@ import (
 )
 
 type Config struct {
-	Services map[string]api.Service `toml:"services"`
+	ServiceName string                 `toml:"serviceName"`
+	SubServices map[string]api.Service `toml:"subServices"`
 
 	HTTPAddr   string `toml:"httpAddr"`
 	LogLevel   string `toml:"logLevel"`
@@ -92,13 +93,13 @@ func main() {
 		}
 		err := createTopic(kafkaWriter.Addr.String(), kafkaWriter.Topic)
 		if err != nil {
-			log.Fatalf("[server] failed to create Kafka topic: %v", err)
+			log.Warnf("[server] failed to create Kafka topic: %v", err)
 		}
 	} else {
 		log.Warnf("[server] kafka was not configured, logs will not be sent to Kafka")
 	}
 
-	api, err := api.New(cfg.Services, kafkaWriter)
+	api, err := api.New(cfg.ServiceName, cfg.SubServices, kafkaWriter)
 	if err != nil {
 		log.Fatalf("[server] failed to create API: %v", err)
 	}

@@ -28,7 +28,7 @@ var mockServices = map[string]Service{
 func TestAPI_createCommentProxy(t *testing.T) {
 	defer gock.Off()
 
-	api, err := New(mockServices, nil)
+	api, err := New("", mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestAPI_filterNewsProxy(t *testing.T) {
 		},
 	}
 
-	api, err := New(mockServices, nil)
+	api, err := New("", mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 		},
 	}
 
-	api, err := New(mockServices, nil)
+	api, err := New("", mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestAPI_newsDetailedProxy(t *testing.T) {
 func TestAPI_latestNewsProxy(t *testing.T) {
 	defer gock.Off()
 
-	api, err := New(mockServices, nil)
+	api, err := New("", mockServices, nil)
 	if err != nil {
 		t.Fatalf("failed to create API: %v", err)
 	}

@@ -58,6 +58,7 @@ func (api *API) loggingMiddleware(kWriter *kafka.Writer) func(http.Handler) http
 					Method:     r.Method,
 					Path:       r.URL.Path,
 					Duration:   time.Since(start).Seconds(),
+					Service:    api.ServiceName,
 				}
 
 				jsonEntry, err := json.Marshal(entry)

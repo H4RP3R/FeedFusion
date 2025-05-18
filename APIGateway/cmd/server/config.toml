@@ -1,13 +1,14 @@
+serviceName = "APIGateway"
 httpAddr = ":8088"
 logLevel = "info"
 kafkaAddr = "localhost:9092"
 kafkaTopic = "feed-fusion-logs"
 kafkaBatch = 0
 
-[services.Aggregator]
+[subServices.Aggregator]
 url = "http://localhost:8066"
 name = "Aggregator"
 
-[services.Comments]
+[subServices.Comments]
 url = "http://localhost:8077"
 name = "Comments"
