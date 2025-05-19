@@ -12,3 +12,7 @@ name = "Aggregator"
 [subServices.Comments]
 url = "http://localhost:8077"
 name = "Comments"
+
+[subServices.Censor]
+url = "http://localhost:8055"
+name = "Censor"
