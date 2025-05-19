@@ -6,12 +6,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/h2non/gock"
+	log "github.com/sirupsen/logrus"
 
 	"gateway/pkg/models"
 )
@@ -23,6 +26,15 @@ var mockServices = map[string]Service{
 	"Comments": {
 		URL: "http://localhost:8081",
 	},
+	"Censor": {
+		URL: "http://localhost:8082",
+	},
+}
+
+func TestMain(m *testing.M) {
+	log.SetLevel(log.PanicLevel)
+	exitCode := m.Run()
+	os.Exit(exitCode)
 }
 
 func TestAPI_createCommentProxy(t *testing.T) {
@@ -43,6 +55,10 @@ func TestAPI_createCommentProxy(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to marshal post: %v", err)
 	}
+
+	gock.New(api.Services["Censor"].URL).
+		Reply(http.StatusOK).
+		BodyString(`{}`) // Not implemented in the Censor service yet
 
 	gock.New(api.Services["Comments"].URL).
 		Reply(http.StatusCreated).
@@ -90,7 +106,82 @@ func TestAPI_createCommentProxy(t *testing.T) {
 	}
 }
 
-// TODO: add negative scenario test for createCommentProxy.
+func TestAPI_createCommentProxyNegativeCases(t *testing.T) {
+	tests := []struct {
+		name                 string
+		mockCensorStatusCode int
+		wantStatusCode       int
+		wantMessage          string
+	}{
+		{
+			name:                 "rejected by censor",
+			mockCensorStatusCode: http.StatusUnprocessableEntity,
+			wantStatusCode:       http.StatusUnprocessableEntity,
+			wantMessage:          "Comment contains inappropriate words.",
+		},
+		{
+			name:                 "censor error",
+			mockCensorStatusCode: http.StatusInternalServerError,
+			wantStatusCode:       http.StatusBadGateway,
+			wantMessage:          "Censorship Service Error",
+		},
+	}
+
+	defer gock.Off()
+
+	api, err := New("", mockServices, nil)
+	if err != nil {
+		t.Fatalf("failed to create API: %v", err)
+	}
+
+	targetPostID, _ := uuid.NewV4()
+	testComment := models.Comment{
+		PostID: targetPostID,
+		Author: "Some Dude",
+		Text:   "Something interesting",
+	}
+	b, err := json.Marshal(testComment)
+	if err != nil {
+		t.Errorf("failed to marshal post: %v", err)
+	}
+
+	gock.New(api.Services["Comments"].URL).
+		Reply(http.StatusCreated).
+		JSON(map[string]string{
+			"id":        uuid.NewV5(uuid.NamespaceURL, testComment.Author+testComment.Text).String(),
+			"post_id":   testComment.PostID.String(),
+			"author":    testComment.Author,
+			"text":      testComment.Text,
+			"published": time.Now().UTC().Format(time.RFC3339),
+		})
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gock.New(api.Services["Censor"].URL).
+				Reply(tt.mockCensorStatusCode).
+				BodyString(`{}`)
+
+			body := bytes.NewBuffer(b)
+			req := httptest.NewRequest(http.MethodPost, "/comments", body)
+			rr := httptest.NewRecorder()
+			api.Router().ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatusCode {
+				t.Errorf("want status code %v, got status code %v", tt.wantStatusCode, rr.Code)
+			}
+
+			b, err := io.ReadAll(rr.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			gotMessage := strings.TrimSpace(string(b))
+
+			if gotMessage != tt.wantMessage {
+				t.Errorf("want message %q, got %q", tt.wantMessage, gotMessage)
+			}
+		})
+	}
+}
 
 func TestAPI_filterNewsProxy(t *testing.T) {
 	defer gock.Off()
