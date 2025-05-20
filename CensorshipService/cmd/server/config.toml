@@ -1,4 +1,5 @@
 serviceName = "CensorshipService"
+censorConfPath = "cmd/server/forbidden.json"
 httpAddr = ":8055"
 logLevel = "info"
 kafkaAddr = "localhost:9092"

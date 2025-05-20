@@ -15,11 +15,13 @@ import (
 	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
-	"censor/pkg/api"
+	"censorship/pkg/api"
+	"censorship/pkg/censor"
 )
 
 type Config struct {
-	ServiceName string `toml:"serviceName"`
+	ServiceName    string `toml:"serviceName"`
+	CensorConfPath string `toml:"censorConfPath"`
 
 	HTTPAddr   string `toml:"httpAddr"`
 	LogLevel   string `toml:"logLevel"`
@@ -30,15 +32,17 @@ type Config struct {
 
 func main() {
 	var (
-		configPath string
-		httpAddr   string
-		logLevel   string
-		kafkaAddr  string
-		kafkaTopic string
-		kafkaBatch int
+		configPath     string
+		censorConfPath string
+		httpAddr       string
+		logLevel       string
+		kafkaAddr      string
+		kafkaTopic     string
+		kafkaBatch     int
 	)
 
-	flag.StringVar(&configPath, "config", "cmd/server/config.toml", "Path to TOML config file")
+	flag.StringVar(&configPath, "servconf", "cmd/server/config.toml", "Path to TOML config file")
+	flag.StringVar(&censorConfPath, "censconf", "cmd/server/forbidden.json", "Path to JSON config file")
 	flag.StringVar(&httpAddr, "http", ":8055", "HTTP server address in the form 'host:port'.")
 	flag.StringVar(&logLevel, "log", "info", "Log level: debug, info, warn, error.")
 	flag.StringVar(&kafkaAddr, "kafka", "", "Kafka server address in the form 'host:port'.")
@@ -52,6 +56,9 @@ func main() {
 	}
 
 	// Override config with flags if set
+	if censorConfPath != "" {
+		cfg.CensorConfPath = censorConfPath
+	}
 	if httpAddr != "" {
 		cfg.HTTPAddr = httpAddr
 	}
@@ -83,6 +90,12 @@ func main() {
 		log.SetLevel(log.ErrorLevel)
 	}
 
+	var censor = censor.New()
+	err := censor.LoadFromJSON(cfg.CensorConfPath)
+	if err != nil {
+		log.Fatalf("[server] failed to load censor config file %s: %v", cfg.CensorConfPath, err)
+	}
+
 	var kafkaWriter *kafka.Writer
 	if cfg.KafkaAddr != "" && cfg.KafkaTopic != "" {
 		kafkaWriter = &kafka.Writer{
@@ -98,7 +111,7 @@ func main() {
 		log.Warnf("[server] kafka was not configured, logs will not be sent to Kafka")
 	}
 
-	api, err := api.New(cfg.ServiceName, kafkaWriter)
+	api, err := api.New(cfg.ServiceName, censor, kafkaWriter)
 	if err != nil {
 		log.Fatalf("[server] failed to create API: %v", err)
 	}

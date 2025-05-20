@@ -2,26 +2,27 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
-	"censor/pkg/models"
+	"censorship/pkg/censor"
+	"censorship/pkg/models"
 )
 
 type API struct {
 	ServiceName string
-
-	r  *mux.Router
-	kw *kafka.Writer
+	Censor      *censor.Censor
+	r           *mux.Router
+	kw          *kafka.Writer
 }
 
-func New(name string, kafkaWriter *kafka.Writer) (*API, error) {
+func New(name string, censor *censor.Censor, kafkaWriter *kafka.Writer) (*API, error) {
 	api := API{
 		ServiceName: name,
+		Censor:      censor,
 		r:           mux.NewRouter(),
 		kw:          kafkaWriter,
 	}
@@ -44,7 +45,7 @@ func (api *API) endpoints() {
 	}
 }
 
-func (apo *API) checkComment(w http.ResponseWriter, r *http.Request) {
+func (api *API) checkComment(w http.ResponseWriter, r *http.Request) {
 	reqID := GetRequestID(r.Context())
 	sID := shorten(reqID)
 
@@ -57,9 +58,16 @@ func (apo *API) checkComment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// ! For testing purposes
-	fmt.Printf("%+v\n", comment)
+	banned := api.Censor.Check(comment.Text)
+	if banned {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		http.Error(w, "Comment is banned", http.StatusUnprocessableEntity)
+		log.Debugf("[createCommentHandler][%s] comment is banned", sID)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
+	log.Debugf("[createCommentHandler][%s] comment approved", sID)
 }
 
 // shorten truncates a string to 6 characters if it is longer than 6, appends '...' at the end,

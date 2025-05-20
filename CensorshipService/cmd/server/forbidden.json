@@ -1,0 +1,17 @@
+[
+    {
+        "text": "qwerty",
+        "pattern": ".*qwerty.*",
+        "exceptions": []
+    },
+    {
+        "text": "йцукен",
+        "pattern": ".*йцукен.*",
+        "exceptions": []
+    },
+    {
+        "text": "zxvbnm",
+        "pattern": ".*zxvbnm.*",
+        "exceptions": []
+    }
+]

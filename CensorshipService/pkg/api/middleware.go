@@ -10,7 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
-	"censor/pkg/logger"
+	"censorship/pkg/logger"
 )
 
 type ctxKeyRequestID struct{}

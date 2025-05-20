@@ -1,4 +1,4 @@
-module censor
+module censorship
 
 go 1.23.3
 
