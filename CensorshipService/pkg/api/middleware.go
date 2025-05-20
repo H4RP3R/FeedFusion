@@ -10,7 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	log "github.com/sirupsen/logrus"
 
-	"gateway/pkg/logger"
+	"censorship/pkg/logger"
 )
 
 type ctxKeyRequestID struct{}
@@ -81,6 +81,13 @@ func (api *API) loggingMiddleware(kWriter *kafka.Writer) func(http.Handler) http
 			next.ServeHTTP(lw, r)
 		})
 	}
+}
+
+func GetRequestID(ctx context.Context) string {
+	if v, ok := ctx.Value(RequestIDKey).(string); ok {
+		return v
+	}
+	return ""
 }
 
 func getClientIP(r *http.Request) string {

@@ -252,13 +252,12 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Errorf("[createCommentProxy][%s] error reading request body: %v", sID, err)
+		log.Errorf("[createCommentProxy][%s] error reading body: %v", sID, err)
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 	r.Body.Close()
 
-	// Cut off invalid requests
 	var comment models.Comment
 	if err := json.Unmarshal(b, &comment); err != nil {
 		log.Errorf("[createCommentProxy][%s] invalid JSON: %v", sID, err)
@@ -266,48 +265,76 @@ func (api *API) createCommentProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if comment.PostID == uuid.Nil && comment.ParentID == uuid.Nil {
-		log.Errorf("[createCommentProxy][%s] missing post_id and parent_id", sID)
-		http.Error(w, "Bad Request: missing post_id or parent_id", http.StatusBadRequest)
+		log.Errorf("[createCommentProxy][%s] missing post/parent ID", sID)
+		http.Error(w, "Bad Request: post_id or parent_id required", http.StatusBadRequest)
 		return
 	}
 
-	targetURL := fmt.Sprint(api.Services["Comments"].URL + "/comments")
-
-	proxyReq, err := http.NewRequest(r.Method, targetURL, bytes.NewReader(b))
+	// Forward to Censor service
+	censorURL := fmt.Sprintf("%s/check", api.Services["Censor"].URL)
+	censorReq, err := http.NewRequest(r.Method, censorURL, bytes.NewReader(b))
 	if err != nil {
-		log.Errorf("[createCommentProxy][%s] error creating proxy request: %v", sID, err)
+		log.Errorf("[createCommentProxy][%s] error creating censor request: %v", sID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-
-	proxyReq.Header = cloneHeaderNoHop(r.Header)
-	if reqID != "" {
-		proxyReq.Header.Set("X-Request-Id", reqID)
-	}
+	censorReq.Header = cloneHeaderNoHop(r.Header)
+	censorReq.Header.Set("X-Request-Id", reqID)
 
 	client := &http.Client{Timeout: httpClientTimeout}
-	resp, err := client.Do(proxyReq)
+	censorResp, err := client.Do(censorReq)
 	if err != nil {
-		log.Errorf("[createCommentProxy][%s] error calling comments service: %v", sID, err)
+		log.Errorf("[createCommentProxy][%s] censor service unreachable: %v", sID, err)
+		http.Error(w, "Censorship Service Unavailable", http.StatusBadGateway)
+		return
+	}
+	defer censorResp.Body.Close()
+
+	if censorResp.StatusCode == http.StatusUnprocessableEntity {
+		log.Errorf("[createCommentProxy][%s] comment rejected", sID)
+		http.Error(w, "Comment contains inappropriate words.", http.StatusUnprocessableEntity)
+		return
+	} else if censorResp.StatusCode != http.StatusOK {
+		log.Errorf("[createCommentProxy][%s] censor error: %d", sID, censorResp.StatusCode)
+		http.Error(w, "Censorship Service Error", http.StatusBadGateway)
+		return
+	}
+	_, _ = io.Copy(io.Discard, censorResp.Body) // Drain response body to prevent resource leaking
+
+	// Forward to Comments service
+	commentsURL := fmt.Sprintf("%s/comments", api.Services["Comments"].URL)
+	commentsReq, err := http.NewRequest(r.Method, commentsURL, bytes.NewReader(b))
+	if err != nil {
+		log.Errorf("[createCommentProxy][%s] error creating comments request: %v", sID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	commentsReq.Header = cloneHeaderNoHop(r.Header)
+	commentsReq.Header.Set("X-Request-Id", reqID)
+
+	commentsResp, err := client.Do(commentsReq)
+	if err != nil {
+		log.Errorf("[createCommentProxy][%s] comments service unreachable: %v", sID, err)
 		http.Error(w, "Comments Service Unavailable", http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer commentsResp.Body.Close()
 
-	// Copy response headers
-	for k, vv := range resp.Header {
+	// Copy filtered headers and status code
+	filteredHeaders := cloneHeaderNoHop(commentsResp.Header)
+	for k, vv := range filteredHeaders {
 		for _, v := range vv {
-			w.Header().Set(k, v)
+			w.Header().Add(k, v)
 		}
 	}
+	w.WriteHeader(commentsResp.StatusCode)
 
-	w.WriteHeader(resp.StatusCode)
-
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Errorf("[createCommentProxy][%s] error copying response body: %v", sID, err)
+	// Stream response body
+	if _, err := io.Copy(w, commentsResp.Body); err != nil {
+		log.Errorf("[createCommentProxy][%s] error copying response: %v", sID, err)
 	}
 
-	log.Debugf("[createCommentProxy][%s] response sent to %v", sID, r.RemoteAddr)
+	log.Debugf("[createCommentProxy][%s] response sent", sID)
 }
 
 func fetchResource(ctx context.Context, client *http.Client, reqID, url, service string, resultObj any, respChan chan any) {
