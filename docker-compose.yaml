@@ -126,7 +126,6 @@ services:
       context: ./CommentsService
       dockerfile: Dockerfile
     environment:
-      #MONGODB_URL: mongodb://mongo:27017/ff_comments?directConnection=true
       MONGO_HOST: mongo
       MONGO_PORT: 27017
       MONGO_DB_NAME: ff_comments
