@@ -1,6 +1,6 @@
 serviceName = "NewsAggregator"
 httpAddr = ":8066"
 logLevel = "info"
-kafkaAddr = "localhost:9092"
+kafkaAddr = "kafka:9093"
 kafkaTopic = "feed-fusion-logs"
 kafkaBatch = 0

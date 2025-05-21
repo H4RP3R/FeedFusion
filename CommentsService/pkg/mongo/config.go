@@ -13,6 +13,8 @@ type Config struct {
 	Host   string
 	Port   string
 	DBName string
+	User   string
+	Pass   string
 }
 
 func NewConfig() (*Config, error) {
@@ -29,12 +31,19 @@ func NewConfig() (*Config, error) {
 	if conf.DBName == "" {
 		return nil, fmt.Errorf("%w: MONGO_DB_NAME", ErrConfParamMissing)
 	}
+	conf.User = os.Getenv("MONGO_USER")
+	conf.Pass = os.Getenv("MONGO_PASS")
 
 	return conf, nil
 }
 
 func (c *Config) conString() string {
+	if c.User != "" && c.Pass != "" {
+		return fmt.Sprintf("mongodb://%s:%s@%s:%s/", c.User, c.Pass, c.Host, c.Port)
+	}
 	return fmt.Sprintf("mongodb://%s:%s/", c.Host, c.Port)
+	// u := os.Getenv("MONGODB_URL")
+	// return fmt.Sprintf(u)
 }
 
 func (c *Config) Options() *options.ClientOptions {

@@ -1,7 +1,7 @@
 logLevel = "info"
-kafkaBrokers = ["localhost:9092"]
+kafkaBrokers = ["kafka:9093"]
 kafkaTopic = "feed-fusion-logs"
 kafkaGroupID = "logkeeper-group"
 
-ElasticSearchNodes = ["http://localhost:9200"]
+ElasticSearchNodes = ["http://elasticsearch:9200"]
 elasticSearchIndex = "feed-fusion-logs"

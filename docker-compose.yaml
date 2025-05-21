@@ -1,8 +1,12 @@
+networks:
+  feed-fusion-net:
+    name:  feed-fusion-net
+
 services:
   kafka:
     image: apache/kafka:3.9.1-rc1
     ports:
-      - "9092:9092"
+      - "9093:9093"
     environment:
       # Configure listeners for both docker and host communication
       KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
@@ -22,6 +26,13 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: nc -z kafka 9093 || exit -1
+      interval: 10s
+      timeout: 15s
+      retries: 20
+    networks: [feed-fusion-net]
+      
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
@@ -33,12 +44,119 @@ services:
       - xpack.security.http.ssl.enabled=false
     ports:
       - "9200:9200"
+    healthcheck:
+      test: curl -f http://localhost:9200/_cluster/health?wait_for_status=yellow
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    networks: [feed-fusion-net]
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.9.0
     ports:
-    - "5601:5601"
+      - "5601:5601"
     environment:
       ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
     depends_on:
     - elasticsearch
+    networks: [feed-fusion-net]
+
+  postgres:
+    image: postgres
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ./NewsAggregator/db_init:/docker-entrypoint-initdb.d
+    ports:
+      - 5432:5432
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [feed-fusion-net]
+
+  aggregator:
+    build:
+      context: ./NewsAggregator
+      dockerfile: Dockerfile
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    ports:
+      - 8066:8066
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [feed-fusion-net]
+
+  logkeeper:
+    build:
+      context: ./LogKeeper
+      dockerfile: Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks: [feed-fusion-net]
+
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    command: ["mongod", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_DATABASE: ff_comments
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [feed-fusion-net]
+
+  comments:
+    build:
+      context: ./CommentsService
+      dockerfile: Dockerfile
+    environment:
+      #MONGODB_URL: mongodb://mongo:27017/ff_comments?directConnection=true
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_DB_NAME: ff_comments
+    ports:
+      - 8077:8077
+    depends_on:
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [feed-fusion-net]
+
+  censor:
+    build:
+      context: ./CensorshipService
+      dockerfile: Dockerfile
+    ports:
+      - 8055:8055
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [feed-fusion-net]
+
+  gateway:
+    build:
+      context: ./APIGateway
+      dockerfile: Dockerfile
+    ports:
+      - 8088:8088
+    depends_on:
+      kafka:
+        condition: service_healthy 
+    networks: [feed-fusion-net]
