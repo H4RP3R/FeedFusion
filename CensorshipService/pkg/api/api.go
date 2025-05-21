@@ -60,7 +60,6 @@ func (api *API) checkComment(w http.ResponseWriter, r *http.Request) {
 
 	banned := api.Censor.Check(comment.Text)
 	if banned {
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		http.Error(w, "Comment is banned", http.StatusUnprocessableEntity)
 		log.Debugf("[createCommentHandler][%s] comment is banned", sID)
 		return
