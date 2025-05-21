@@ -63,6 +63,11 @@ func (api *API) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 
 	comment, err = api.db.CreateComment(r.Context(), comment)
 	if err != nil {
+		if errors.Is(err, mongo.ErrParentCommentNotFound) {
+			http.Error(w, "Parent comment not found", http.StatusNotFound)
+			log.Debugf("[createCommentHandler][%s] comment wasn't created: %v", sID, err)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Errorf("[createCommentHandler][%s] failed to create comment: %v", sID, err)
 		return
