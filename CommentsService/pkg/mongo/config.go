@@ -42,8 +42,6 @@ func (c *Config) conString() string {
 		return fmt.Sprintf("mongodb://%s:%s@%s:%s/", c.User, c.Pass, c.Host, c.Port)
 	}
 	return fmt.Sprintf("mongodb://%s:%s/", c.Host, c.Port)
-	// u := os.Getenv("MONGODB_URL")
-	// return fmt.Sprintf(u)
 }
 
 func (c *Config) Options() *options.ClientOptions {
