@@ -1,0 +1,70 @@
+name: Tests
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: news
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.23.3
+
+    - name: Wait for Postgres
+      run: |
+        until pg_isready -h localhost -U postgres; do sleep 1; done
+
+    - name: Init Postgres schema
+      run: |
+        psql -h localhost -U postgres -d news -f NewsAggregator/schema.sql
+      env:
+        PGPASSWORD: postgres
+
+    - name: Run tests [APIGateway]
+      working-directory: APIGateway
+      run: go test ./...
+
+    - name: Run tests [CensorshipService]
+      working-directory: CensorshipService
+      run: go test ./...
+
+    - name: Run tests [NewsAggregator]
+      working-directory: NewsAggregator
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: news
+      run: go test ./...
+
+    - name: Start MongoDB
+      uses: supercharge/mongodb-github-action@1.12.0
+      with:
+        mongodb-version: latest
+        mongodb-port: 27018
+      
+
+    - name: Run tests [CommentsService]
+      working-directory: CommentsService
+      env:
+        MONGO_USER: ""
+        MONGO_PASS: ""
+      run: go test ./...
