@@ -70,7 +70,7 @@ services:
       - ./NewsAggregator/db_init:/docker-entrypoint-initdb.d
     ports:
       - 5432:5432
-    restart: always
+    restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
@@ -108,7 +108,7 @@ services:
 
   mongo:
     image: mongo
-    restart: always
+    restart: unless-stopped
     ports:
       - 27017:27017
     command: ["mongod", "--bind_ip_all"]
@@ -116,8 +116,8 @@ services:
       MONGO_INITDB_DATABASE: ff_comments
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
+      interval: 20s
+      timeout: 10s
       retries: 20
     networks: [feed-fusion-net]
 
