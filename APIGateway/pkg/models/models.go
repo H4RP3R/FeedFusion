@@ -12,7 +12,7 @@ type Post struct {
 	Content   string    `json:"content"`
 	Published time.Time `json:"published"`
 	Link      string    `json:"link"`
-	Comments  []Comment `json:"comments"`
+	Comments  []Comment `json:"comments,omitempty"`
 }
 
 type Preview struct {
@@ -29,5 +29,5 @@ type Comment struct {
 	Author    string     `json:"author"`
 	Text      string     `json:"text"`
 	Published time.Time  `json:"published"`
-	Replies   []*Comment `json:"replies"`
+	Replies   []*Comment `json:"replies,omitempty"`
 }
