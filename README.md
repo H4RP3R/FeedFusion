@@ -18,6 +18,7 @@
 ## Быстрый старт
 
 ```console
+export POSTGRES_PASSWORD=some_pass
 docker compose up --build
 ```
 
