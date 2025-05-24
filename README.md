@@ -18,7 +18,12 @@
 ## Быстрый старт
 
 ```console
+# Скопировать схему БД для последующей инициализации
+mkdir -p NewsAggregator/db_init
+cp NewsAggregator/schema.sql NewsAggregator/db_init/schema.sql
+# Установить переменную окружения с паролем для Postgres
 export POSTGRES_PASSWORD=some_pass
+# Поднять контейнеры
 docker compose up --build
 ```
 
