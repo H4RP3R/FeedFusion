@@ -5,3 +5,5 @@ kafkaGroupID = "logkeeper-group"
 
 ElasticSearchNodes = ["http://elasticsearch:9200"]
 elasticSearchIndex = "feed-fusion-logs"
+
+numWorkers = 4

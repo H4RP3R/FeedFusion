@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +26,8 @@ type Config struct {
 
 	ElasticSearchIndex string   `toml:"elasticSearchIndex"`
 	ElasticSearchNodes []string `toml:"elasticSearchNodes"`
+
+	NumWorkers int `toml:"numWorkers"`
 }
 
 type LogEntry struct {
@@ -69,7 +72,7 @@ func main() {
 		cfg.LogLevel = logLevel
 	}
 
-	switch logLevel {
+	switch strings.ToLower(logLevel) {
 	case "debug":
 		log.SetLevel(log.DebugLevel)
 	case "info":
@@ -94,6 +97,16 @@ func main() {
 	})
 	defer r.Close()
 
+	jobs := make(chan kafka.Message, cfg.NumWorkers*5) // buffer is needed to increase throughput
+	var wg sync.WaitGroup
+	wg.Add(cfg.NumWorkers)
+	for workerID := 0; workerID < cfg.NumWorkers; workerID++ {
+		go func(id int) {
+			defer wg.Done()
+			logWorker(ctx, es, jobs, cfg.ElasticSearchIndex, id)
+		}(workerID)
+	}
+
 	log.Info("[logkeeper] accepting logs...")
 	for {
 		msg, err := r.ReadMessage(ctx)
@@ -106,25 +119,47 @@ func main() {
 		}
 		log.Debugf("[logkeeper] received message: %s", string(msg.Value))
 
-		var entry LogEntry
-		if err := json.Unmarshal(msg.Value, &entry); err != nil {
-			log.Errorf("[logkeeper] failed to unmarshal log entry: %v", err)
-			continue
-		}
+		jobs <- msg
+	}
 
-		// Index in Elasticsearch
-		res, err := es.Index(
-			cfg.ElasticSearchIndex,
-			strings.NewReader(string(msg.Value)),
-			es.Index.WithDocumentID(entry.Service+entry.RequestID),
-		)
-		if res != nil {
-			defer res.Body.Close()
-		}
-		if err != nil || (res != nil && res.IsError()) {
-			log.Errorf("[logkeeper] failed to index document: %v", err)
-		} else {
-			log.Infof("[logkeeper][%s] log entry indexed", shorten(entry.RequestID))
+	close(jobs)
+	wg.Wait()
+}
+
+func logWorker(ctx context.Context, es *elasticsearch.Client, jobs <-chan kafka.Message, elasticSearchIndex string, workerID int) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Infof("[logkeeper][workerID:%d] context cancelled, exiting worker", workerID)
+			return
+
+		case msg, ok := <-jobs:
+			if !ok {
+				log.Infof("[logkeeper][workerID:%d] jobs channel closed, exiting worker", workerID)
+				return
+			}
+			log.Debugf("[logkeeper][workerID:%d] received message: %s", workerID, string(msg.Value))
+
+			var entry LogEntry
+			if err := json.Unmarshal(msg.Value, &entry); err != nil {
+				log.Errorf("[logkeeper][workerID:%d] failed to unmarshal log entry: %v", workerID, err)
+				continue
+			}
+
+			// Index in Elasticsearch
+			res, err := es.Index(
+				elasticSearchIndex,
+				strings.NewReader(string(msg.Value)),
+				es.Index.WithDocumentID(entry.Service+entry.RequestID),
+			)
+			if res != nil {
+				res.Body.Close()
+			}
+			if err != nil || (res != nil && res.IsError()) {
+				log.Errorf("[logkeeper][workerID:%d] failed to index document: %v", workerID, err)
+			} else {
+				log.Infof("[logkeeper][workerID:%d][%s] log entry indexed", workerID, shorten(entry.RequestID))
+			}
 		}
 	}
 }
